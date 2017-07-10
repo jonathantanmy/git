@@ -47,6 +47,10 @@ use with dumb transports but otherwise is OK as long as
 `objects/info/alternates` points at the object stores it
 borrows from.
 +
+. You could have blobs that are merely promised by another source. When
+Git requires those blobs, it will invoke the command in the
+`core.promisedBlobCommand` configuration variable.
++
 This directory is ignored if $GIT_COMMON_DIR is set and
 "$GIT_COMMON_DIR/objects" will be used instead.
 
@@ -90,6 +94,10 @@ objects/info/http-alternates::
 	This file records URLs to alternate object stores that
 	this object store borrows objects from, to be used when
 	the repository is fetched over HTTP.
+
+objects/promisedblob::
+	This file records the sha1 object names and sizes of promised
+	blobs.
 
 refs::
 	References are stored in subdirectories of this

@@ -12,6 +12,7 @@
 #include "streaming.h"
 #include "tree-walk.h"
 #include "sha1-array.h"
+#include "promised-blob.h"
 
 struct batch_options {
 	int enabled;
@@ -432,6 +433,13 @@ static int batch_packed_object(const struct object_id *oid,
 	return 0;
 }
 
+static int batch_promised_blob(const struct object_id *oid,
+			       void *data)
+{
+	oid_array_append(data, oid);
+	return 0;
+}
+
 static int batch_objects(struct batch_options *opt)
 {
 	struct strbuf buf = STRBUF_INIT;
@@ -473,6 +481,7 @@ static int batch_objects(struct batch_options *opt)
 
 		for_each_loose_object(batch_loose_object, &sa, 0);
 		for_each_packed_object(batch_packed_object, &sa, 0);
+		for_each_promised_blob(batch_promised_blob, &sa);
 
 		cb.opt = opt;
 		cb.expand = &data;

@@ -17,6 +17,7 @@
 #include "prio-queue.h"
 #include "sha1-array.h"
 #include "oidset.h"
+#include "promised-blob.h"
 
 static int transfer_unpack_limit = -1;
 static int fetch_unpack_limit = -1;
@@ -25,6 +26,7 @@ static int prefer_ofs_delta = 1;
 static int no_done;
 static int deepen_since_ok;
 static int deepen_not_ok;
+static int blob_max_bytes_ok;
 static int fetch_fsck_objects = -1;
 static int transfer_fsck_objects = -1;
 static int agent_supported;
@@ -406,6 +408,9 @@ static int find_common(struct fetch_pack_args *args,
 			packet_buf_write(&req_buf, "deepen-not %s", s->string);
 		}
 	}
+	if (args->blob_max_bytes && blob_max_bytes_ok)
+		packet_buf_write(&req_buf, "blob-max-bytes %ld",
+				 *args->blob_max_bytes);
 	packet_buf_flush(&req_buf);
 	state_len = req_buf.len;
 
@@ -814,6 +819,9 @@ static int get_pack(struct fetch_pack_args *args,
 	}
 	else
 		demux.out = xd[0];
+	
+	if (args->blob_max_bytes && blob_max_bytes_ok)
+		merge_promises(demux.out);
 
 	if (!args->keep_pack && unpack_limit) {
 
@@ -849,6 +857,8 @@ static int get_pack(struct fetch_pack_args *args,
 					"--keep=fetch-pack %"PRIuMAX " on %s",
 					(uintmax_t)getpid(), hostname);
 		}
+		if (args->blob_max_bytes && blob_max_bytes_ok)
+			argv_array_push(&cmd.args, "--trust-promises");
 		if (args->check_self_contained_and_connected)
 			argv_array_push(&cmd.args, "--check-self-contained-and-connected");
 	}
@@ -978,6 +988,8 @@ static struct ref *do_fetch_pack(struct fetch_pack_args *args,
 		die(_("Server does not support --shallow-exclude"));
 	if (!server_supports("deepen-relative") && args->deepen_relative)
 		die(_("Server does not support --deepen"));
+	if (server_supports("blob-max-bytes"))
+		blob_max_bytes_ok = 1;
 
 	if (everything_local(args, &ref, sought, nr_sought)) {
 		packet_flush(fd[1]);

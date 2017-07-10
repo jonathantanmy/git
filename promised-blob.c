@@ -5,6 +5,8 @@
 #include "run-command.h"
 #include "sha1-array.h"
 #include "config.h"
+#include "pkt-line.h"
+#include "varint.h"
 
 #define ENTRY_SIZE (GIT_SHA1_RAWSZ + 8)
 /*
@@ -167,4 +169,89 @@ int request_promised_blobs(const struct oid_array *blobs)
 	 */
 	reprepare_packed_git();
 	return blobs_requested;
+}
+
+void merge_promises(int fd)
+{
+	static char scratch[1];
+
+	char *next_existing, *existing_limit;
+	char *out_filename;
+	int out_fd;
+	char buffer[LARGE_PACKET_DATA_MAX + 1];
+	char *next = buffer;
+	int size;
+	uintmax_t new_promise_count;
+	int i;
+	char *promisedblob_filename;
+
+	prepare_promised_blobs();
+	if (promised_blob_nr > 0) {
+		next_existing = promised_blobs;
+		existing_limit = promised_blobs +
+				 (promised_blob_nr * ENTRY_SIZE);
+	} else {
+		next_existing = existing_limit = scratch;
+	}
+
+
+	out_filename = xstrfmt("%s/tmp_promisedblob_XXXXXX",
+			       get_object_directory());
+	out_fd = git_mkstemp_mode(out_filename, 0444);
+	if (out_fd < 0)
+		die("Could not create temporary file %s", out_filename);
+
+	/* avoid buffer overruns when decoding varints */
+	buffer[LARGE_PACKET_DATA_MAX] = 0;
+
+	size = packet_read(fd, NULL, NULL, buffer, sizeof(buffer), 0);
+	new_promise_count = decode_varint((const unsigned char **) &next);
+	for (i = 0; i < new_promise_count; i++) {
+		unsigned long promised_size_nbo;
+		if (next - buffer >= size) {
+			size = packet_read(fd, NULL, NULL, buffer,
+					   sizeof(buffer), 0);
+			next = buffer;
+		}
+		for (;
+		     next_existing < existing_limit &&
+		     memcmp(next_existing, next, GIT_SHA1_RAWSZ) < 0;
+		     next_existing += ENTRY_SIZE)
+			write_in_full(out_fd, next_existing, ENTRY_SIZE);
+		write_in_full(out_fd, next, GIT_SHA1_RAWSZ);
+		next += GIT_SHA1_RAWSZ;
+		promised_size_nbo =
+			htonll((unsigned long)
+			       decode_varint((const unsigned char **) &next));
+		write_in_full(out_fd, &promised_size_nbo,
+			      sizeof(promised_size_nbo));
+	}
+	/* Write the remaining old entries */
+	for (;
+	     next_existing < existing_limit;
+	     next_existing += ENTRY_SIZE)
+		write_in_full(out_fd, next_existing, ENTRY_SIZE);
+	close(out_fd);
+
+	if (promised_blob_nr > 0) {
+		if (munmap(promised_blobs, promised_blob_nr * ENTRY_SIZE)) {
+			perror("merge_promises");
+			warning("Could not munmap promised blobs");
+		}
+	}
+	/* Reset promised blobs, because they have changed */
+	promised_blobs = NULL;
+	promised_blob_nr = -1;
+
+	promisedblob_filename = xstrfmt("%s/promisedblob",
+					get_object_directory());
+	if (rename(out_filename, promisedblob_filename)) {
+		perror("merge_promises");
+		unlink_or_warn(out_filename);
+		die("Could not rename %s to %s", out_filename,
+		    promisedblob_filename);
+	}
+
+	free(out_filename);
+	free(promisedblob_filename);
 }

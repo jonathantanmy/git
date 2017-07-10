@@ -24,4 +24,10 @@ int for_each_promised_blob(each_promised_blob_fn, void *);
  */
 int request_promised_blobs(const struct oid_array *blobs);
 
+/*
+ * Reads a list of promised blobs, as produced by pack-objects, and merges it
+ * with the existing list on disk.
+ */
+void merge_promises(int fd);
+
 #endif

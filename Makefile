@@ -621,6 +621,7 @@ PROGRAM_OBJS += shell.o
 PROGRAM_OBJS += show-index.o
 PROGRAM_OBJS += upload-pack.o
 PROGRAM_OBJS += remote-testsvn.o
+PROGRAM_OBJS += server-endpoint.o
 
 # Binary suffix, set to .exe for Windows builds
 X =
@@ -695,6 +696,7 @@ BINDIR_PROGRAMS_NEED_X += git-upload-pack
 BINDIR_PROGRAMS_NEED_X += git-receive-pack
 BINDIR_PROGRAMS_NEED_X += git-upload-archive
 BINDIR_PROGRAMS_NEED_X += git-shell
+BINDIR_PROGRAMS_NEED_X += git-server-endpoint
 
 BINDIR_PROGRAMS_NO_X += git-cvsserver
 

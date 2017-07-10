@@ -1177,7 +1177,7 @@ static int add_object_entry_from_bitmap(const unsigned char *sha1,
 	create_object_entry(sha1, type, name_hash, 0, 0, index_pos, pack, offset);
 
 	display_progress(progress_state, nr_result);
-	return 1;
+	return 0;
 }
 
 struct pbase_tree_cache {

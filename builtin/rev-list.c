@@ -269,7 +269,7 @@ static int show_object_fast(
 	off_t found_offset)
 {
 	fprintf(stdout, "%s\n", sha1_to_hex(sha1));
-	return 1;
+	return 0;
 }
 
 int cmd_rev_list(int argc, const char **argv, const char *prefix)

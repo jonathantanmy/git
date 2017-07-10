@@ -573,7 +573,7 @@ static struct bitmap *find_objects(struct rev_info *revs,
 	return base;
 }
 
-static void show_extended_objects(struct bitmap *objects,
+static int show_extended_objects(struct bitmap *objects,
 				  show_reachable_fn show_reach)
 {
 	struct eindex *eindex = &bitmap_git.ext_index;
@@ -581,16 +581,21 @@ static void show_extended_objects(struct bitmap *objects,
 
 	for (i = 0; i < eindex->count; ++i) {
 		struct object *obj;
+		int ret;
 
 		if (!bitmap_get(objects, bitmap_git.pack->num_objects + i))
 			continue;
 
 		obj = eindex->objects[i];
-		show_reach(obj->oid.hash, obj->type, 0, eindex->hashes[i], NULL, 0);
+		ret = show_reach(obj->oid.hash, obj->type, 0,
+				 eindex->hashes[i], NULL, 0);
+		if (ret)
+			return ret;
 	}
+	return 0;
 }
 
-static void show_objects_for_type(
+static int show_objects_for_type(
 	struct bitmap *objects,
 	struct ewah_bitmap *type_filter,
 	enum object_type object_type,
@@ -603,7 +608,7 @@ static void show_objects_for_type(
 	eword_t filter;
 
 	if (bitmap_git.reuse_objects == bitmap_git.pack->num_objects)
-		return;
+		return 0;
 
 	ewah_iterator_init(&it, type_filter);
 
@@ -614,6 +619,7 @@ static void show_objects_for_type(
 			const unsigned char *sha1;
 			struct revindex_entry *entry;
 			uint32_t hash = 0;
+			int ret;
 
 			if ((word >> offset) == 0)
 				break;
@@ -629,12 +635,16 @@ static void show_objects_for_type(
 			if (bitmap_git.hashes)
 				hash = get_be32(bitmap_git.hashes + entry->nr);
 
-			show_reach(sha1, object_type, 0, hash, bitmap_git.pack, entry->offset);
+			ret = show_reach(sha1, object_type, 0, hash,
+					 bitmap_git.pack, entry->offset);
+			if (ret)
+				return ret;
 		}
 
 		pos += BITS_IN_EWORD;
 		i++;
 	}
+	return 0;
 }
 
 static int in_bitmapped_pack(struct object_list *roots)
@@ -803,23 +813,29 @@ int reuse_partial_packfile_from_bitmap(struct packed_git **packfile,
 	return 0;
 }
 
-void traverse_bitmap_commit_list(show_reachable_fn show_reachable)
+int traverse_bitmap_commit_list(show_reachable_fn show_reachable)
 {
+	int ret;
 	assert(bitmap_git.result);
 
-	show_objects_for_type(bitmap_git.result, bitmap_git.commits,
+	ret = show_objects_for_type(bitmap_git.result, bitmap_git.commits,
 		OBJ_COMMIT, show_reachable);
-	show_objects_for_type(bitmap_git.result, bitmap_git.trees,
-		OBJ_TREE, show_reachable);
-	show_objects_for_type(bitmap_git.result, bitmap_git.blobs,
-		OBJ_BLOB, show_reachable);
-	show_objects_for_type(bitmap_git.result, bitmap_git.tags,
-		OBJ_TAG, show_reachable);
+	if (!ret)
+		ret = show_objects_for_type(bitmap_git.result, bitmap_git.trees,
+			OBJ_TREE, show_reachable);
+	if (!ret)
+		ret = show_objects_for_type(bitmap_git.result, bitmap_git.blobs,
+			OBJ_BLOB, show_reachable);
+	if (!ret)
+		ret = show_objects_for_type(bitmap_git.result, bitmap_git.tags,
+			OBJ_TAG, show_reachable);
 
-	show_extended_objects(bitmap_git.result, show_reachable);
+	if (!ret)
+		ret = show_extended_objects(bitmap_git.result, show_reachable);
 
 	bitmap_free(bitmap_git.result);
 	bitmap_git.result = NULL;
+	return ret;
 }
 
 static uint32_t count_object_type(struct bitmap *objects,

@@ -36,7 +36,12 @@ typedef int (*show_reachable_fn)(
 
 int prepare_bitmap_git(void);
 void count_bitmap_commit_list(uint32_t *commits, uint32_t *trees, uint32_t *blobs, uint32_t *tags);
-void traverse_bitmap_commit_list(show_reachable_fn show_reachable);
+/*
+ * Iterates over every marked object in the bitmap. If an invocation of
+ * show_reachable returns non-zero, terminates the iteration and returns that
+ * return value. Otherwise, returns 0.
+ */
+int traverse_bitmap_commit_list(show_reachable_fn show_reachable);
 void test_bitmap_walk(struct rev_info *revs);
 int prepare_bitmap_walk(struct rev_info *revs);
 int reuse_partial_packfile_from_bitmap(struct packed_git **packfile, uint32_t *entries, off_t *up_to);

@@ -11,6 +11,7 @@ struct oid_array {
 #define OID_ARRAY_INIT { NULL, 0, 0, 0 }
 
 void oid_array_append(struct oid_array *array, const struct object_id *oid);
+void oid_array_append_sha1(struct oid_array *array, const unsigned char *sha1);
 int oid_array_lookup(struct oid_array *array, const struct object_id *oid);
 void oid_array_clear(struct oid_array *array);
 

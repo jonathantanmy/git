@@ -9,6 +9,13 @@ void oid_array_append(struct oid_array *array, const struct object_id *oid)
 	array->sorted = 0;
 }
 
+void oid_array_append_sha1(struct oid_array *array, const unsigned char *sha1)
+{
+	ALLOC_GROW(array->oid, array->nr + 1, array->alloc);
+	hashcpy(array->oid[array->nr++].hash, sha1);
+	array->sorted = 0;
+}
+
 static int void_hashcmp(const void *a, const void *b)
 {
 	return oidcmp(a, b);

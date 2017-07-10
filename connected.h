@@ -34,6 +34,8 @@ struct check_connected_options {
 	/* If non-zero, show progress as we traverse the objects. */
 	int progress;
 
+	int trust_promises;
+
 	/*
 	 * Insert these variables into the environment of the child process.
 	 */

@@ -21,6 +21,7 @@ struct git_transport_options {
 	const char *uploadpack;
 	const char *receivepack;
 	struct push_cas_option *cas;
+	unsigned long *blob_max_bytes;
 };
 
 enum transport_family {
@@ -209,6 +210,9 @@ void transport_check_allowed(const char *type);
 
 /* Send push certificates */
 #define TRANS_OPT_PUSH_CERT "pushcert"
+
+/* Exclude blobs above a certain size */
+#define TRANS_OPT_BLOB_MAX_BYTES "blob-max-bytes"
 
 /**
  * Returns 0 if the option was used, non-zero otherwise. Prints a

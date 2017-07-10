@@ -797,4 +797,22 @@ test_expect_success '--blob-max-bytes has no effect if support for it is not adv
 	git -C client cat-file -e $(git hash-object server/one.t)
 '
 
+test_expect_success 'fetch with --blob-max-bytes' '
+	rm -rf server client &&
+	test_create_repo server &&
+	test_commit -C server one &&
+	test_config -C server uploadpack.advertiseblobmaxbytes 1 &&
+	test_create_repo client &&
+
+	git -C client fetch --blob-max-bytes=0 ../server HEAD:somewhere &&
+
+	# Ensure that object is not inadvertently fetched
+	test_must_fail git -C client cat-file -e $(git hash-object server/one.t) &&
+
+	# But we can set a hook, which makes it succeed
+	test_config -C client core.promisedblobcommand \
+		"git -C \"$(pwd)/server\" pack-objects --stdout | git unpack-objects" &&
+	git -C client cat-file -e $(git hash-object server/one.t)
+'
+
 test_done

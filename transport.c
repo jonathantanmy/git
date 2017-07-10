@@ -161,6 +161,15 @@ static int set_git_option(struct git_transport_options *opts,
 	} else if (!strcmp(name, TRANS_OPT_DEEPEN_RELATIVE)) {
 		opts->deepen_relative = !!value;
 		return 0;
+	} else if (!strcmp(name, TRANS_OPT_BLOB_MAX_BYTES)) {
+		unsigned long *ptr = xmalloc(sizeof(*ptr));
+		if (!git_parse_ulong(value, ptr)) {
+			error("Invalid %s value: %s", TRANS_OPT_BLOB_MAX_BYTES,
+			      value);
+			return 1;
+		}
+		opts->blob_max_bytes = ptr;
+		return 0;
 	}
 	return 1;
 }
@@ -229,6 +238,7 @@ static int fetch_refs_via_pack(struct transport *transport,
 		data->options.check_self_contained_and_connected;
 	args.cloning = transport->cloning;
 	args.update_shallow = data->options.update_shallow;
+	args.blob_max_bytes = data->options.blob_max_bytes;
 
 	if (!data->got_remote_heads) {
 		connect_setup(transport, 0);

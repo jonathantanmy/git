@@ -61,6 +61,8 @@ int check_connected(sha1_iterate_fn fn, void *cb_data,
 	if (opt->progress)
 		argv_array_pushf(&rev_list.args, "--progress=%s",
 				 _("Checking connectivity"));
+	if (opt->trust_promises)
+		argv_array_push(&rev_list.args, "--trust-promises");
 
 	rev_list.git_cmd = 1;
 	rev_list.env = opt->env;

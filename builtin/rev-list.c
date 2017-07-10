@@ -54,6 +54,8 @@ static const char rev_list_usage[] =
 static struct progress *progress;
 static unsigned progress_counter;
 
+static int trust_promises;
+
 static void finish_commit(struct commit *commit, void *data);
 static void show_commit(struct commit *commit, void *data)
 {
@@ -179,7 +181,10 @@ static void finish_commit(struct commit *commit, void *data)
 static void finish_object(struct object *obj, const char *name, void *cb_data)
 {
 	struct rev_list_info *info = cb_data;
-	if (obj->type == OBJ_BLOB && !has_object_file(&obj->oid))
+	unsigned flags = trust_promises ?
+			 OBJECT_INFO_TRUST_PROMISES : 0;
+	if (obj->type == OBJ_BLOB &&
+	    !has_object_file_with_flags(&obj->oid, flags))
 		die("missing blob object '%s'", oid_to_hex(&obj->oid));
 	if (info->revs->verify_objects && !obj->parsed && obj->type != OBJ_COMMIT)
 		parse_object(&obj->oid);
@@ -331,6 +336,10 @@ int cmd_rev_list(int argc, const char **argv, const char *prefix)
 		}
 		if (skip_prefix(arg, "--progress=", &arg)) {
 			show_progress = arg;
+			continue;
+		}
+		if (!strcmp(arg, "--trust-promises")) {
+			trust_promises = 1;
 			continue;
 		}
 		usage(rev_list_usage);

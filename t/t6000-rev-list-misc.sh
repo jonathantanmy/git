@@ -4,6 +4,7 @@ test_description='miscellaneous rev-list tests'
 
 . ./test-lib.sh
 
+
 test_expect_success setup '
 	echo content1 >wanted_file &&
 	echo content2 >unwanted_file &&
@@ -112,6 +113,28 @@ test_expect_success '--header shows a NUL after each commit' '
 	Q
 	EOF
 	test_cmp expect actual
+'
+
+test_expect_success '--trust-promises' '
+	rm -rf .git &&
+	git init &&
+
+	test_commit foo &&
+	HASH=$(git hash-object foo.t) &&
+	rm .git/objects/$(echo $HASH | cut -c1-2)/$(echo $HASH | cut -c3-40) &&
+
+	# Since the missing blob is not a promised blob, rev-list will
+	# fail regardless of the presence of --trust-promises.
+	test_must_fail git rev-list --objects HEAD &&
+	test_must_fail git rev-list --objects --trust-promises HEAD &&
+
+	# Add the blob as a promised blob.
+	printf "%s%016x" "$HASH" "$(wc -c <foo.t)" |
+		hex_pack >.git/objects/promisedblob &&
+
+	# Now it succeeds if --trust-promises is set.
+	test_must_fail git rev-list --objects HEAD &&
+	git rev-list --objects --trust-promises HEAD
 '
 
 test_done

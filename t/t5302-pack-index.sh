@@ -262,4 +262,28 @@ EOF
     grep "^warning:.* expected .tagger. line" err
 '
 
+test_expect_success '--trust-promises' '
+	rm -rf src dst &&
+
+	# Create a thin pack.
+	git init src &&
+	test_commit -C src foo &&
+	printf "%s\n^%s\n" $(git -C src rev-parse HEAD) $(git hash-object src/foo.t) |
+		git -C src pack-objects --stdout --thin > my.pack &&
+
+	# Since the missing blob is not a promised blob, index-pack will fail
+	# regardless of the presence of --trust-promises.
+	git init dst &&
+	test_must_fail git -C dst index-pack --strict "$(pwd)/my.pack" &&
+	test_must_fail git -C dst index-pack --trust-promises --strict "$(pwd)/my.pack" &&
+
+	# Add the blob as a promised blob.
+	printf "%s%016x" "$(git hash-object src/foo.t)" "$(wc -c <src/foo.t)" |
+		hex_pack >dst/.git/objects/promisedblob &&
+
+	# Now it succeeds if --trust-promises is set.
+	test_must_fail git -C dst index-pack --strict "$(pwd)/my.pack" &&
+	git -C dst index-pack --trust-promises --strict "$(pwd)/my.pack"
+'
+
 test_done

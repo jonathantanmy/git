@@ -1800,7 +1800,8 @@ struct object_info {
 		OI_CACHED,
 		OI_LOOSE,
 		OI_PACKED,
-		OI_DBCACHED
+		OI_DBCACHED,
+		OI_PROMISED
 	} whence;
 	union {
 		/*
@@ -1833,7 +1834,18 @@ struct object_info {
 #define OBJECT_INFO_SKIP_CACHED 4
 /* Do not retry packed storage after checking packed and loose storage */
 #define OBJECT_INFO_QUICK 8
-extern int sha1_object_info_extended(const unsigned char *, struct object_info *, unsigned flags);
+/*
+ * Immediately return true without attempting to fetch a promised blob. In such
+ * a case, "oi" or "oi->contentp" must be NULL, and "oi->whence" will be set to
+ * OI_PROMISED.
+ *
+ * If this flag is not set, and if the given hash is the hash of a promised
+ * blob, it will be fetched and then handled as if it was an ordinary loose or
+ * packed object.
+ */
+#define OBJECT_INFO_TRUST_PROMISES 16
+extern int sha1_object_info_extended(const unsigned char *,
+				     struct object_info *oi, unsigned flags);
 extern int packed_object_info(struct packed_git *pack, off_t offset, struct object_info *);
 
 /* Dumb servers support */

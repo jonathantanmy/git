@@ -2980,6 +2980,26 @@ static int sha1_loose_object_info(const unsigned char *sha1,
 	return (status < 0) ? status : 0;
 }
 
+static int promised_blob_info(const struct object_id *oid, struct object_info *oi)
+{
+	unsigned long size;
+	if (!is_promised_blob(oid, &size))
+		return -1;
+	if (oi->typep)
+		*oi->typep = OBJ_BLOB;
+	if (oi->sizep)
+		*oi->sizep = size;
+	if (oi->disk_sizep)
+		*oi->disk_sizep = 0;
+	if (oi->delta_base_sha1)
+		hashclr(oi->delta_base_sha1);
+	if (oi->typename)
+		strbuf_addstr(oi->typename, typename(OBJ_BLOB));
+	if (oi->contentp)
+		die("Cannot provide content of promised blob");
+	return 0;
+}
+
 int sha1_object_info_extended(const unsigned char *sha1, struct object_info *oi, unsigned flags)
 {
 	static struct object_info blank_oi = OBJECT_INFO_INIT;
@@ -3032,6 +3052,11 @@ retry:
 	if (!already_retried) {
 		struct oid_array promised = OID_ARRAY_INIT;
 		oid_array_append_sha1(&promised, real);
+		if ((flags & OBJECT_INFO_TRUST_PROMISES) &&
+		    !promised_blob_info(promised.oid, oi)) {
+			oi->whence = OI_PROMISED;
+			return 0;
+		}
 		if (request_promised_blobs(&promised)) {
 			already_retried = 1;
 			goto retry;

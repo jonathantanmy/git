@@ -81,6 +81,7 @@ static int verbose;
 static int show_resolving_progress;
 static int show_stat;
 static int check_self_contained_and_connected;
+static int trust_promises;
 
 static struct progress *progress;
 
@@ -219,9 +220,12 @@ static unsigned check_object(struct object *obj)
 		return 0;
 
 	if (!(obj->flags & FLAG_CHECKED)) {
-		unsigned long size;
-		int type = sha1_object_info(obj->oid.hash, &size);
-		if (type <= 0)
+		int type;
+		struct object_info oi = {&type};
+		int flags = OBJECT_INFO_LOOKUP_REPLACE |
+			    (trust_promises ?
+			     OBJECT_INFO_TRUST_PROMISES : 0);
+		if (sha1_object_info_extended(obj->oid.hash, &oi, flags))
 			die(_("did not receive expected object %s"),
 			      oid_to_hex(&obj->oid));
 		if (type != obj->type)
@@ -1727,6 +1731,8 @@ int cmd_index_pack(int argc, const char **argv, const char *prefix)
 					die(_("bad %s"), arg);
 			} else if (skip_prefix(arg, "--max-input-size=", &arg)) {
 				max_input_size = strtoumax(arg, NULL, 10);
+			} else if (!strcmp(arg, "--trust-promises")) {
+				trust_promises = 1;
 			} else
 				usage(index_pack_usage);
 			continue;

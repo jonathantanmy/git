@@ -190,7 +190,7 @@ int packet_writel(int fd, const char *line, ...)
 	return packet_flush_gently(fd);
 }
 
-static int packet_write_gently(const int fd_out, const char *buf, size_t size)
+int packet_write_gently(int fd_out, const char *buf, size_t size)
 {
 	static char packet_write_buffer[LARGE_PACKET_MAX];
 	size_t packet_size;

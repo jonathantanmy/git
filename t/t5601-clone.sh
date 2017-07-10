@@ -596,4 +596,29 @@ test_expect_success 'partial clone' '
 	git -C client cat-file -e "$HASH1"
 '
 
+test_expect_success 'batch missing blob request during checkout' '
+	rm -rf server client &&
+	test_create_repo server &&
+	echo a >server/a &&
+	echo b >server/b &&
+	git -C server add a b &&
+	git -C server commit -m x &&
+	echo aa >server/a &&
+	echo bb >server/b &&
+	git -C server add a b &&
+	git -C server commit -m x &&
+	git -C server repack -a -d --write-bitmap-index &&
+	test_config -C server uploadpack.advertiseblobmaxbytes 1 &&
+
+	git clone --blob-max-bytes=0 "file://$(pwd)/server" client &&
+
+	# Set a hook so that we can track what blobs were fetched
+	test_config -C client core.promisedblobcommand \
+		"tee \"$(pwd)/blobs\" |
+		 git fetch-blob \"file://$(pwd)/server\"" &&
+	git -C client checkout HEAD^ &&
+	# Ensure that both missing blobs are fetched in one request
+	test "$(wc -l <blobs)" -eq 2
+'
+
 test_done

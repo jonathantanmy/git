@@ -13,6 +13,7 @@
 #include "dir.h"
 #include "submodule.h"
 #include "submodule-config.h"
+#include "promised-blob.h"
 
 /*
  * Error messages expected by scripts out of plumbing commands such as
@@ -354,6 +355,7 @@ static int check_updates(struct unpack_trees_options *o)
 	struct progress *progress = NULL;
 	struct index_state *index = &o->result;
 	struct checkout state = CHECKOUT_INIT;
+	struct oid_array objects_to_fetch = OID_ARRAY_INIT;
 	int i;
 
 	state.force = 1;
@@ -380,6 +382,11 @@ static int check_updates(struct unpack_trees_options *o)
 	if (should_update_submodules() && o->update && !o->dry_run)
 		reload_gitmodules_file(index, &state);
 
+	for (i = 0; i < index->cache_nr; i++) {
+		struct cache_entry *ce = index->cache[i];
+		oid_array_append(&objects_to_fetch, &ce->oid);
+	}
+	request_promised_blobs(&objects_to_fetch);
 	for (i = 0; i < index->cache_nr; i++) {
 		struct cache_entry *ce = index->cache[i];
 

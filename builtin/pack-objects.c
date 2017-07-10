@@ -25,6 +25,8 @@
 #include "sha1-array.h"
 #include "argv-array.h"
 #include "mru.h"
+#include "pkt-line.h"
+#include "varint.h"
 
 static const char *pack_usage[] = {
 	N_("git pack-objects --stdout [<options>...] [< <ref-list> | < <object-list>]"),
@@ -77,6 +79,8 @@ static unsigned long max_delta_cache_size = 256 * 1024 * 1024;
 static unsigned long cache_max_small_delta_size = 1000;
 
 static unsigned long window_memory_limit = 0;
+
+static long blob_max_bytes = -1;
 
 /*
  * stats
@@ -1069,23 +1073,84 @@ static const char no_closure_warning[] = N_(
 "disabling bitmap writing, as some objects are not being packed"
 );
 
+struct oversized_blob {
+	struct hashmap_entry entry;
+	struct object_id oid;
+	unsigned long size;
+};
+struct hashmap oversized_blobs;
+
+static int oversized_blob_cmp_fn(const void *b1, const void *b2,
+				 const void *keydata)
+{
+	const struct object_id *oid2 = keydata ? keydata :
+		&((const struct oversized_blob *) b2)->oid;
+	return oidcmp(&((const struct oversized_blob *) b1)->oid, oid2);
+}
+
+/*
+ * Returns 1 and records this blob in oversized_blobs if the given blob does
+ * not meet any defined blob size limits.  Blobs that appear as a tree entry
+ * whose basename begins with ".git" are never considered oversized.
+ */
+static int oversized(const unsigned char *sha1, const char *name) {
+	const char *last_slash, *basename;
+	unsigned long size;
+	unsigned int hash;
+
+	if (blob_max_bytes < 0)
+		return 0;
+
+	last_slash = strrchr(name, '/');
+	basename = last_slash ? last_slash + 1 : name;
+	if (starts_with(basename, ".git"))
+		return 0;
+
+	sha1_object_info(sha1, &size);
+	if (size <= blob_max_bytes)
+		return 0;
+
+	if (!oversized_blobs.tablesize)
+		hashmap_init(&oversized_blobs, oversized_blob_cmp_fn, 0);
+	hash = sha1hash(sha1);
+	if (!hashmap_get_from_hash(&oversized_blobs, hash, sha1)) {
+		struct oversized_blob *ob = xmalloc(sizeof(*ob));
+		hashmap_entry_init(ob, hash);
+		hashcpy(ob->oid.hash, sha1);
+		ob->size = size;
+		hashmap_add(&oversized_blobs, ob);
+	}
+	return 1;
+}
+
 static int add_object_entry(const unsigned char *sha1, enum object_type type,
 			    const char *name, int preferred_base)
 {
 	struct packed_git *found_pack = NULL;
 	off_t found_offset = 0;
 	uint32_t index_pos;
+	struct hashmap_entry entry;
 
 	if (have_duplicate_entry(sha1, preferred_base, &index_pos))
 		return 0;
 
-	if (ignore_object(sha1, preferred_base, &found_pack, &found_offset)) {
+	if (ignore_object(sha1, preferred_base, &found_pack, &found_offset) ||
+	    (!preferred_base && type == OBJ_BLOB && oversized(sha1, name))) {
 		/* The pack is missing an object, so it will not have closure */
 		if (write_bitmap_index) {
 			warning(_(no_closure_warning));
 			write_bitmap_index = 0;
 		}
 		return 0;
+	}
+
+	/*
+	 * Ensure that we do not report this blob as oversized if we are going
+	 * to use it, be it in the returned pack or as a preferred base
+	 */
+	if (oversized_blobs.tablesize) {
+		hashmap_entry_init(&entry, sha1hash(sha1));
+		free(hashmap_remove(&oversized_blobs, &entry, sha1));
 	}
 
 	create_object_entry(sha1, type, pack_name_hash(name),
@@ -2863,6 +2928,46 @@ static int option_parse_unpack_unreachable(const struct option *opt,
 	return 0;
 }
 
+static int oversized_blob_cmp(const void *b1, const void *b2)
+{
+	return oidcmp(&(*(const struct oversized_blob **) b1)->oid,
+		      &(*(const struct oversized_blob **) b2)->oid);
+}
+
+#define LARGEST_ENTRY (GIT_SHA1_RAWSZ + 10)
+static void write_oversized_info(int fd)
+{
+	struct oversized_blob **obs;
+	struct hashmap_iter iter;
+	struct oversized_blob *ob;
+	int i = 0;
+	unsigned char buffer[LARGE_PACKET_DATA_MAX];
+	unsigned char *next = buffer;
+
+	ALLOC_ARRAY(obs, oversized_blobs.size);
+
+	for (ob = hashmap_iter_first(&oversized_blobs, &iter);
+	     ob;
+	     ob = hashmap_iter_next(&iter))
+		obs[i++] = ob;
+	QSORT(obs, oversized_blobs.size, oversized_blob_cmp);
+
+	next += encode_varint(oversized_blobs.size, next);
+	for (i = 0; i < oversized_blobs.size; i++) {
+		if (next - buffer > LARGE_PACKET_DATA_MAX - LARGEST_ENTRY) {
+			if (packet_write_gently(fd, (char *) buffer,
+						next - buffer))
+				die("Could not write oversized info");
+			next = buffer;
+		}
+		memcpy(next, &obs[i]->oid, sizeof(obs[i]->oid));
+		next += sizeof(obs[i]->oid);
+		next += encode_varint(obs[i]->size, next);
+	}
+	if (packet_write_gently(fd, (char *) buffer, next - buffer))
+		die("Could not write oversized info");
+}
+
 int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 {
 	int use_internal_rev_list = 0;
@@ -2946,6 +3051,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 			 N_("use a bitmap index if available to speed up counting objects")),
 		OPT_BOOL(0, "write-bitmap-index", &write_bitmap_index,
 			 N_("write a bitmap index together with the pack index")),
+		OPT_MAGNITUDE(0, "blob-max-bytes", &blob_max_bytes,
+			      N_("exclude and report blobs larger than this")),
 		OPT_END(),
 	};
 
@@ -3022,6 +3129,9 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 	if (!rev_list_all || !rev_list_reflog || !rev_list_index)
 		unpack_unreachable_expiration = 0;
 
+	if (blob_max_bytes >= 0 && !pack_to_stdout)
+		die("if --blob-max-bytes is specified, --stdout must also be specified");
+
 	/*
 	 * "soft" reasons not to use bitmaps - for on-disk repack by default we want
 	 *
@@ -3038,7 +3148,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 		use_bitmap_index = use_bitmap_index_default;
 
 	/* "hard" reasons not to use bitmaps; these just won't work at all */
-	if (!use_internal_rev_list || (!pack_to_stdout && write_bitmap_index) || is_repository_shallow())
+	if (!use_internal_rev_list || (!pack_to_stdout && write_bitmap_index) ||
+	    is_repository_shallow() || (blob_max_bytes >= 0))
 		use_bitmap_index = 0;
 
 	if (pack_to_stdout || !rev_list_all)
@@ -3088,6 +3199,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 		return 0;
 	if (nr_result)
 		prepare_pack(window, depth);
+	if (blob_max_bytes >= 0)
+		write_oversized_info(1);
 	write_pack_file();
 	if (progress)
 		fprintf(stderr, "Total %"PRIu32" (delta %"PRIu32"),"

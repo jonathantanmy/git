@@ -1,61 +1,74 @@
-Git - fast, scalable, distributed revision control system
-=========================================================
+This is still a work in progress. You can try it as follows:
 
-Git is a fast, scalable, distributed revision control system with an
-unusually rich command set that provides both high-level operations
-and full access to internals.
+Clone a repository and make it advertise the new feature.
 
-Git is an Open Source project covered by the GNU General Public
-License version 2 (some parts of it are under different licenses,
-compatible with the GPLv2). It was originally written by Linus
-Torvalds with help of a group of hackers around the net.
+    $ make prefix=$HOME/local install
+    $ cd $HOME/tmp
+    $ git clone https://github.com/git/git
+    $ git -C git config advertiseblobmaxbytes 1
 
-Please read the file [INSTALL][] for installation instructions.
+Generate bitmaps in the repo. This is needed because `rev-list`, the command
+used to perform reachability checks when serving blobs, has [bugs] in the
+absence of bitmaps.
 
-Many Git online resources are accessible from <https://git-scm.com/>
-including full documentation and Git related tools.
+[bugs]: https://public-inbox.org/git/20170309003547.6930-1-jonathantanmy@google.com/
 
-See [Documentation/gittutorial.txt][] to get started, then see
-[Documentation/giteveryday.txt][] for a useful minimum set of commands, and
-Documentation/git-<commandname>.txt for documentation of each command.
-If git has been correctly installed, then the tutorial can also be
-read with `man gittutorial` or `git help tutorial`, and the
-documentation of each command with `man git-<commandname>` or `git help
-<commandname>`.
+    $ git -C git repack -a -d --write-bitmap-index
 
-CVS users may also want to read [Documentation/gitcvs-migration.txt][]
-(`man gitcvs-migration` or `git help cvs-migration` if git is
-installed).
+Perform the partial clone and check that it is indeed smaller. Specify
+"file://" in order to test the partial clone mechanism. (If not, Git will
+perform a local clone, which unselectively copies every object.)
 
-The user discussion and development of Git take place on the Git
-mailing list -- everyone is welcome to post bug reports, feature
-requests, comments and patches to git@vger.kernel.org (read
-[Documentation/SubmittingPatches][] for instructions on patch submission).
-To subscribe to the list, send an email with just "subscribe git" in
-the body to majordomo@vger.kernel.org. The mailing list archives are
-available at <https://public-inbox.org/git/>,
-<http://marc.info/?l=git> and other archival sites.
+Currently, partial clones **do not work with http/https/ftp** or any other
+protocol requiring a remote helper that does not support `connect`.
 
-The maintainer frequently sends the "What's cooking" reports that
-list the current status of various development topics to the mailing
-list.  The discussion following them give a good reference for
-project status, development direction and remaining tasks.
+    $ git clone --blob-max-bytes=0 "file://$(pwd)/git" git2
+    $ du -sh git
+    130M	git
+    $ du -sh git2
+    85M	git2
 
-The name "git" was given by Linus Torvalds when he wrote the very
-first version. He described the tool as "the stupid content tracker"
-and the name as (depending on your mood):
+Observe that the new repo is automatically configured to fetch missing blobs
+from the original repo.
 
- - random three-letter combination that is pronounceable, and not
-   actually used by any common UNIX command.  The fact that it is a
-   mispronunciation of "get" may or may not be relevant.
- - stupid. contemptible and despicable. simple. Take your pick from the
-   dictionary of slang.
- - "global information tracker": you're in a good mood, and it actually
-   works for you. Angels sing, and a light suddenly fills the room.
- - "goddamn idiotic truckload of sh*t": when it breaks
+    $ cat git2/.git/config
+    [core]
+    	repositoryformatversion = 0
+    	filemode = true
+    	bare = false
+    	logallrefupdates = true
+    	promisedblobcommand = git fetch-blob \"file:///[snip]/tmp/git\"
+    [remote "origin"]
+    	url = file:///[snip]/tmp/git
+    	fetch = +refs/heads/*:refs/remotes/origin/*
+    [branch "master"]
+    	remote = origin
+    	merge = refs/heads/master
 
-[INSTALL]: INSTALL
-[Documentation/gittutorial.txt]: Documentation/gittutorial.txt
-[Documentation/giteveryday.txt]: Documentation/giteveryday.txt
-[Documentation/gitcvs-migration.txt]: Documentation/gitcvs-migration.txt
-[Documentation/SubmittingPatches]: Documentation/SubmittingPatches
+When dealing with objects in the local repo, Git commands generally process
+them one at a time; invoking "promisedblobcommand" is no exception. But in this
+branch, "git checkout" has been optimized to fetch missing blobs all at once.
+This can be observed as follows:
+
+    $ cd git2
+    $ git config core.promisedblobcommand "tee blobs | $(git config core.promisedblobcommand)"
+    $ git checkout HEAD^
+    Counting objects: 2975, done.
+    Compressing objects: 100% (2688/2688), done.
+    Total 2975 (delta 243), reused 1640 (delta 220)
+    pack	7d821a2a4cf0c1936312a478b2b84a42796317b0
+    Note: checking out 'HEAD^'.
+    
+    You are in 'detached HEAD' state. You can look around, make experimental
+    changes and commit them, and you can discard any commits you make in this
+    state without impacting any branches by performing another checkout.
+    
+    If you want to create a new branch to retain commits you create, you may
+    do so (now or later) by using -b with the checkout command again. Example:
+    
+      git checkout -b <new-branch-name>
+    
+    HEAD is now at 5e5a7cd93... Sixteenth batch for 2.14
+    $ wc -l blobs
+    3064 blobs
+    

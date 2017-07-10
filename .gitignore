@@ -55,6 +55,7 @@
 /git-fast-export
 /git-fast-import
 /git-fetch
+/git-fetch-blob
 /git-fetch-pack
 /git-filter-branch
 /git-fmt-merge-msg

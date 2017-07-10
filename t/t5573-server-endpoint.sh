@@ -57,4 +57,22 @@ test_expect_success 'fetch-blobs unreachable' '
 	test_i18ngrep "$(printf "ERR not our blob.*%s" "$MYBLOB")" out
 '
 
+test_expect_success 'fetch-blobs client' '
+	rm -rf server client &&
+	git init server &&
+	(
+		cd server &&
+		test_commit 0 &&
+		test_commit 1 &&
+		git repack -a -d --write-bitmap-index
+	) &&
+	BLOB0=$(git hash-object server/0.t) &&
+	BLOB1=$(git hash-object server/1.t) &&
+
+	git init client &&
+	printf "%s\n%s\n" "$BLOB0" "$BLOB1" | git -C client fetch-blob "file://$(pwd)/server" &&
+	git -C client cat-file -e "$BLOB0" &&
+	git -C client cat-file -e "$BLOB1"
+'
+
 test_done

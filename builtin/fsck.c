@@ -15,6 +15,7 @@
 #include "progress.h"
 #include "streaming.h"
 #include "decorate.h"
+#include "promised-blob.h"
 
 #define REACHABLE 0x0001
 #define SEEN      0x0002
@@ -223,6 +224,9 @@ static void check_reachable_object(struct object *obj)
 	if (!(obj->flags & HAS_OBJ)) {
 		if (has_sha1_pack(obj->oid.hash))
 			return; /* it is in pack - forget about it */
+		if (obj->type == OBJ_BLOB &&
+		    is_promised_blob(&obj->oid, NULL))
+			return;
 		printf("missing %s %s\n", printable_type(obj),
 			describe_object(obj));
 		errors_found |= ERROR_REACHABLE;
@@ -642,6 +646,13 @@ static int mark_packed_for_connectivity(const struct object_id *oid,
 	return 0;
 }
 
+static int mark_promised_blob_for_connectivity(const struct object_id *oid,
+					       void *data)
+{
+	mark_object_for_connectivity(oid);
+	return 0;
+}
+
 static char const * const fsck_usage[] = {
 	N_("git fsck [<options>] [<object>...]"),
 	NULL
@@ -701,6 +712,8 @@ int cmd_fsck(int argc, const char **argv, const char *prefix)
 	if (connectivity_only) {
 		for_each_loose_object(mark_loose_for_connectivity, NULL, 0);
 		for_each_packed_object(mark_packed_for_connectivity, NULL, 0);
+		for_each_promised_blob(mark_promised_blob_for_connectivity,
+				       NULL);
 	} else {
 		fsck_object_dir(get_object_directory());
 

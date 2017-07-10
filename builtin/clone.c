@@ -59,6 +59,7 @@ static struct string_list option_optional_reference = STRING_LIST_INIT_NODUP;
 static int option_dissociate;
 static int max_jobs = -1;
 static struct string_list option_recurse_submodules = STRING_LIST_INIT_NODUP;
+static unsigned long blob_max_bytes = -1;
 
 static int recurse_submodules_cb(const struct option *opt,
 				 const char *arg, int unset)
@@ -134,6 +135,8 @@ static struct option builtin_clone_options[] = {
 			TRANSPORT_FAMILY_IPV4),
 	OPT_SET_INT('6', "ipv6", &family, N_("use IPv6 addresses only"),
 			TRANSPORT_FAMILY_IPV6),
+	OPT_MAGNITUDE(0, "blob-max-bytes", &blob_max_bytes,
+		      N_("do not fetch blobs above this size")),
 	OPT_END()
 };
 
@@ -640,7 +643,8 @@ static void update_remote_refs(const struct ref *refs,
 			       const char *branch_top,
 			       const char *msg,
 			       struct transport *transport,
-			       int check_connectivity)
+			       int check_connectivity,
+			       int trust_promises)
 {
 	const struct ref *rm = mapped_refs;
 
@@ -649,6 +653,9 @@ static void update_remote_refs(const struct ref *refs,
 
 		opt.transport = transport;
 		opt.progress = transport->progress;
+
+		if (trust_promises)
+			opt.trust_promises = 1;
 
 		if (check_connected(iterate_ref_map, &rm, &opt))
 			die(_("remote did not send all necessary objects"));
@@ -1100,6 +1107,12 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 		transport_set_option(transport, TRANS_OPT_UPLOADPACK,
 				     option_upload_pack);
 
+	if (blob_max_bytes >= 0) {
+		char *str = xstrfmt("%lu", blob_max_bytes);
+		transport_set_option(transport, TRANS_OPT_BLOB_MAX_BYTES, str);
+		free(str);
+	}
+
 	if (transport->smart_options && !deepen)
 		transport->smart_options->check_self_contained_and_connected = 1;
 
@@ -1160,13 +1173,20 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 	write_refspec_config(src_ref_prefix, our_head_points_at,
 			remote_head_points_at, &branch_top);
 
+	if (blob_max_bytes >= 0) {
+		char *hook = xstrfmt("git fetch-blob \"%s\"", repo);
+		git_config_set("core.promisedblobcommand", hook);
+		free(hook);
+	}
+
 	if (is_local)
 		clone_local(path, git_dir);
 	else if (refs && complete_refs_before_fetch)
 		transport_fetch_refs(transport, mapped_refs);
 
 	update_remote_refs(refs, mapped_refs, remote_head_points_at,
-			   branch_top.buf, reflog_msg.buf, transport, !is_local);
+			   branch_top.buf, reflog_msg.buf, transport, !is_local,
+			   blob_max_bytes >= 0);
 
 	update_head(our_head_points_at, remote_head, reflog_msg.buf);
 

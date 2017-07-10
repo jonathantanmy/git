@@ -571,4 +571,29 @@ test_expect_success 'GIT_TRACE_PACKFILE produces a usable pack' '
 	git -C replay.git index-pack -v --stdin <tmp.pack
 '
 
+test_expect_success 'partial clone' '
+	rm -rf server client &&
+	test_create_repo server &&
+	test_commit -C server one &&
+	HASH1=$(git hash-object server/one.t) &&
+	git -C server revert HEAD &&
+	test_commit -C server two &&
+	HASH2=$(git hash-object server/two.t) &&
+	git -C server repack -a -d --write-bitmap-index &&
+	test_config -C server uploadpack.advertiseblobmaxbytes 1 &&
+
+	git clone --blob-max-bytes=0 "file://$(pwd)/server" client &&
+
+	# Ensure that unneeded blobs are not inadvertently fetched. As part of
+	# doing this, temporarily set a bad hook.
+	test_config -C client core.promisedblobcommand false &&
+	git -C client cat-file -e "$HASH2" &&
+	test_must_fail git -C client cat-file -e "$HASH1" &&
+
+	# But we can set a working hook, which makes it succeed
+	test_config -C client core.promisedblobcommand \
+		"git fetch-blob \"file://$(pwd)/server\"" &&
+	git -C client cat-file -e "$HASH1"
+'
+
 test_done

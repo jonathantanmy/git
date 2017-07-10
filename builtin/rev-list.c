@@ -260,6 +260,8 @@ static int show_bisect_vars(struct rev_list_info *info, int reaches, int all)
 	return 0;
 }
 
+static int max_object_count;
+
 static int show_object_fast(
 	const unsigned char *sha1,
 	enum object_type type,
@@ -268,7 +270,11 @@ static int show_object_fast(
 	struct packed_git *found_pack,
 	off_t found_offset)
 {
+	if (!max_object_count)
+		return 1;
 	fprintf(stdout, "%s\n", sha1_to_hex(sha1));
+	if (max_object_count > 0)
+		max_object_count--;
 	return 0;
 }
 
@@ -386,8 +392,13 @@ int cmd_rev_list(int argc, const char **argv, const char *prefix)
 				printf("%d\n", commit_count);
 				return 0;
 			}
-		} else if (revs.max_count < 0 &&
-			   revs.tag_objects && revs.tree_objects && revs.blob_objects) {
+		} else if (revs.tag_objects && revs.tree_objects && revs.blob_objects) {
+			/*
+			 * prepare_bitmap_walk() may reset revs.max_count by
+			 * indirectly calling get_revision_internal() in
+			 * revision.c, so assign it first
+			 */
+			max_object_count = revs.max_count;
 			if (!prepare_bitmap_walk(&revs)) {
 				traverse_bitmap_commit_list(&show_object_fast);
 				return 0;

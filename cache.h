@@ -1611,8 +1611,6 @@ struct pack_entry {
 	struct packed_git *p;
 };
 
-extern struct packed_git *parse_pack_index(unsigned char *sha1, const char *idx_path);
-
 /* A hook to report invalid files in pack directory */
 #define PACKDIR_FILE_PACK 1
 #define PACKDIR_FILE_IDX 2
@@ -1646,12 +1644,6 @@ extern int odb_mkstemp(struct strbuf *template, const char *pattern);
  * error.
  */
 extern int odb_pack_keep(const char *name);
-
-/*
- * mmap the index file for the specified packfile (if it is not
- * already mmapped).  Return 0 on success.
- */
-extern int open_pack_index(struct packed_git *);
 
 /*
  * munmap the index file for the specified packfile (if it is

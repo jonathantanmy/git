@@ -949,12 +949,12 @@ static int have_duplicate_entry(const unsigned char *sha1,
 	return 1;
 }
 
-static int want_found_object(int exclude, struct packed_git *p)
+static int ignore_found_object(int preferred_base, struct packed_git *p)
 {
-	if (exclude)
-		return 1;
-	if (incremental)
+	if (preferred_base)
 		return 0;
+	if (incremental)
+		return 1;
 
 	/*
 	 * When asked to do --local (do not include an object that appears in a
@@ -972,19 +972,19 @@ static int want_found_object(int exclude, struct packed_git *p)
 	 */
 	if (!ignore_packed_keep &&
 	    (!local || !have_non_local_packs))
-		return 1;
+		return 0;
 
 	if (local && !p->pack_local)
-		return 0;
+		return 1;
 	if (ignore_packed_keep && p->pack_local && p->pack_keep)
-		return 0;
+		return 1;
 
 	/* we don't know yet; keep looking for more packs */
 	return -1;
 }
 
 /*
- * Check whether we want the object in the pack (e.g., we do not want
+ * Check whether we should ignore this object (e.g., we do not want
  * objects found in non-local stores if the "--local" option was used).
  *
  * If the caller already knows an existing pack it wants to take the object
@@ -992,16 +992,16 @@ static int want_found_object(int exclude, struct packed_git *p)
  * function finds if there is any pack that has the object and returns the pack
  * and its offset in these variables.
  */
-static int want_object_in_pack(const unsigned char *sha1,
-			       int exclude,
-			       struct packed_git **found_pack,
-			       off_t *found_offset)
+static int ignore_object(const unsigned char *sha1,
+			 int preferred_base,
+			 struct packed_git **found_pack,
+			 off_t *found_offset)
 {
 	struct mru_entry *entry;
-	int want;
+	int ignore;
 
-	if (!exclude && local && has_loose_object_nonlocal(sha1))
-		return 0;
+	if (!preferred_base && local && has_loose_object_nonlocal(sha1))
+		return 1;
 
 	/*
 	 * If we already know the pack object lives in, start checks from that
@@ -1009,9 +1009,9 @@ static int want_object_in_pack(const unsigned char *sha1,
 	 * are present we will determine the answer right now.
 	 */
 	if (*found_pack) {
-		want = want_found_object(exclude, *found_pack);
-		if (want != -1)
-			return want;
+		ignore = ignore_found_object(preferred_base, *found_pack);
+		if (ignore != -1)
+			return ignore;
 	}
 
 	for (entry = packed_git_mru->head; entry; entry = entry->next) {
@@ -1030,15 +1030,15 @@ static int want_object_in_pack(const unsigned char *sha1,
 				*found_offset = offset;
 				*found_pack = p;
 			}
-			want = want_found_object(exclude, p);
-			if (!exclude && want > 0)
+			ignore = ignore_found_object(preferred_base, p);
+			if (!preferred_base && ignore > 0)
 				mru_mark(packed_git_mru, entry);
-			if (want != -1)
-				return want;
+			if (ignore != -1)
+				return ignore;
 		}
 	}
 
-	return 1;
+	return 0;
 }
 
 static void create_object_entry(const unsigned char *sha1,
@@ -1073,16 +1073,16 @@ static const char no_closure_warning[] = N_(
 );
 
 static int add_object_entry(const unsigned char *sha1, enum object_type type,
-			    const char *name, int exclude)
+			    const char *name, int preferred_base)
 {
 	struct packed_git *found_pack = NULL;
 	off_t found_offset = 0;
 	uint32_t index_pos;
 
-	if (have_duplicate_entry(sha1, exclude, &index_pos))
+	if (have_duplicate_entry(sha1, preferred_base, &index_pos))
 		return 0;
 
-	if (!want_object_in_pack(sha1, exclude, &found_pack, &found_offset)) {
+	if (ignore_object(sha1, preferred_base, &found_pack, &found_offset)) {
 		/* The pack is missing an object, so it will not have closure */
 		if (write_bitmap_index) {
 			warning(_(no_closure_warning));
@@ -1092,7 +1092,7 @@ static int add_object_entry(const unsigned char *sha1, enum object_type type,
 	}
 
 	create_object_entry(sha1, type, pack_name_hash(name),
-			    exclude, name && no_try_delta(name),
+			    preferred_base, name && no_try_delta(name),
 			    index_pos, found_pack, found_offset);
 
 	display_progress(progress_state, nr_result);
@@ -1109,7 +1109,7 @@ static int add_object_entry_from_bitmap(const unsigned char *sha1,
 	if (have_duplicate_entry(sha1, 0, &index_pos))
 		return 0;
 
-	if (!want_object_in_pack(sha1, 0, &pack, &offset))
+	if (ignore_object(sha1, 0, &pack, &offset))
 		return 0;
 
 	create_object_entry(sha1, type, name_hash, 0, 0, index_pos, pack, offset);

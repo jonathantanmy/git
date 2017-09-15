@@ -12,7 +12,8 @@ SYNOPSIS
 'git pack-objects' [-q | --progress | --all-progress] [--all-progress-implied]
 	[--no-reuse-delta] [--delta-base-offset] [--non-empty]
 	[--local] [--incremental] [--window=<n>] [--depth=<n>]
-	[--revs [--unpacked | --all]] [--stdout | base-name]
+	[--revs [--unpacked | --all]]
+	[--stdout [--blob-max-bytes=<n>] | base-name]
 	[--shallow] [--keep-true-parents] < object-list
 
 
@@ -235,6 +236,15 @@ So does `git bundle` (see linkgit:git-bundle[1]) when it creates a bundle.
 --keep-true-parents::
 	With this option, parents that are hidden by grafts are packed
 	nevertheless.
+
+--blob-max-bytes=<n>::
+	This option can only be used with --stdout. If specified, a blob
+	larger than this will not be packed unless a to-be-packed tree
+	has that blob with a filename beginning with ".git".  The size
+	can be suffixed with "k", "m", or "g", and may be "0".
++
+If specified, after printing the packfile, pack-objects will print, in packet
+format (pkt-line), the names of excluded blobs and their sizes.
 
 SEE ALSO
 --------

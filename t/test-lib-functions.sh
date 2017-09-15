@@ -1020,3 +1020,15 @@ nongit () {
 		"$@"
 	)
 }
+
+# Converts big-endian pairs of hexadecimal digits into bytes. For example,
+# "printf 61620d0a | hex_pack" results in "ab\r\n".
+hex_pack () {
+	perl -e '$/ = undef; $input = <>; print pack("H*", $input)'
+}
+
+# Converts bytes into big-endian pairs of hexadecimal digits. For example,
+# "printf 'ab\r\n' | hex_unpack" results in "61620d0a".
+hex_unpack () {
+	perl -e '$/ = undef; $input = <>; print unpack("H2" x length($input), $input)'
+}

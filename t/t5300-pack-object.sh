@@ -457,6 +457,51 @@ test_expect_success !PTHREADS,C_LOCALE_OUTPUT 'pack-objects --threads=N or pack.
 	grep -F "no threads support, ignoring pack.threads" err
 '
 
+lcut () {
+	perl -e '$/ = undef; $_ = <>; s/^.{'$1'}//s; print $_'
+}
+
+test_expect_success '--blob-size-limit works with multiple excluded' '
+	rm -rf server &&
+	git init server &&
+	printf a > server/a &&
+	printf b > server/b &&
+	printf c-very-long-file > server/c &&
+	printf d-very-long-file > server/d &&
+	git -C server add a b c d &&
+	git -C server commit -m x &&
+
+	git -C server rev-parse HEAD >objects &&
+	git -C server pack-objects --revs --stdout --blob-max-bytes=10 <objects >my.pack &&
+
+	# Ensure that only the small blobs are in the packfile
+	git index-pack my.pack &&
+	git verify-pack -v my.idx >objectlist &&
+	grep $(git hash-object server/a) objectlist &&
+	grep $(git hash-object server/b) objectlist &&
+	! grep $(git hash-object server/c) objectlist &&
+	! grep $(git hash-object server/d) objectlist
+'
+
+test_expect_success '--blob-size-limit never excludes special files' '
+	rm -rf server &&
+	git init server &&
+	printf a-very-long-file > server/a &&
+	printf a-very-long-file > server/.git-a &&
+	printf b-very-long-file > server/b &&
+	git -C server add a .git-a b &&
+	git -C server commit -m x &&
+
+	git -C server rev-parse HEAD >objects &&
+	git -C server pack-objects --revs --stdout --blob-max-bytes=10 <objects >my.pack &&
+
+	# Ensure that the .git-a blob is in the packfile, despite also
+	# appearing as a non-.git file
+	git index-pack my.pack &&
+	git verify-pack -v my.idx >objectlist &&
+	grep $(git hash-object server/a) objectlist
+'
+
 #
 # WARNING!
 #

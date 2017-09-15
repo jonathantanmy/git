@@ -23,6 +23,7 @@ struct git_transport_options {
 	const char *uploadpack;
 	const char *receivepack;
 	struct push_cas_option *cas;
+	const char *blob_max_bytes;
 };
 
 enum transport_family {
@@ -217,6 +218,9 @@ void transport_check_allowed(const char *type);
 
 /* Do not send "have" lines */
 #define TRANS_OPT_NO_HAVES "no-haves"
+
+/* Exclude blobs above a certain size */
+#define TRANS_OPT_BLOB_MAX_BYTES "blob-max-bytes"
 
 /**
  * Returns 0 if the option was used, non-zero otherwise. Prints a

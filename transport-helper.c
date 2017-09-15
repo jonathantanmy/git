@@ -671,6 +671,10 @@ static int fetch(struct transport *transport,
 	if (data->transport_options.update_shallow)
 		set_helper_option(transport, "update-shallow", "true");
 
+	if (data->transport_options.blob_max_bytes)
+		set_helper_option(transport, "blob-max-bytes",
+				  data->transport_options.blob_max_bytes);
+
 	if (data->fetch)
 		return fetch_with_fetch(transport, nr_heads, to_fetch);
 

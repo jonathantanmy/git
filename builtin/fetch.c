@@ -1050,6 +1050,10 @@ static struct transport *prepare_transport(struct remote *remote, int deepen)
 	if (blob_max_bytes) {
 		set_option(transport, TRANS_OPT_BLOB_MAX_BYTES, blob_max_bytes);
 		set_option(transport, TRANS_OPT_FROM_PROMISOR, "1");
+	} else if (remote->blob_max_bytes) {
+		set_option(transport, TRANS_OPT_BLOB_MAX_BYTES,
+			   remote->blob_max_bytes);
+		set_option(transport, TRANS_OPT_FROM_PROMISOR, "1");
 	}
 	return transport;
 }

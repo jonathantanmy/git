@@ -4,6 +4,7 @@
 #include "remote.h"
 #include "connect.h"
 #include "sha1-array.h"
+#include "config.h"
 
 static const char fetch_pack_usage[] =
 "git fetch-pack [--all] [--stdin] [--quiet | -q] [--keep | -k] [--thin] "
@@ -151,6 +152,16 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix)
 		}
 		if (!strcmp("--no-haves", arg)) {
 			args.no_haves = 1;
+			continue;
+		}
+		if (skip_prefix(arg, "--blob-max-bytes=", &arg)) {
+			unsigned long *ptr = xmalloc(sizeof(*ptr));
+			if (!git_parse_ulong(arg, ptr)) {
+				error("Invalid --blob-max-bytes value: %s",
+				      arg);
+				usage(fetch_pack_usage);
+			}
+			args.blob_max_bytes = ptr;
 			continue;
 		}
 		usage(fetch_pack_usage);

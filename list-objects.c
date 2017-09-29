@@ -7,6 +7,7 @@
 #include "tree-walk.h"
 #include "revision.h"
 #include "list-objects.h"
+#include "packfile.h"
 
 static void process_blob(struct rev_info *revs,
 			 struct blob *blob,
@@ -24,6 +25,13 @@ static void process_blob(struct rev_info *revs,
 		die("bad blob object");
 	if (obj->flags & (UNINTERESTING | SEEN))
 		return;
+	if (!has_object_file(&obj->oid)) {
+		if (revs->exclude_promisor_objects &&
+		    is_promisor_object(&obj->oid)) {
+			return;
+		}
+		/* error message will be reported later */
+	}
 	obj->flags |= SEEN;
 
 	pathlen = path->len;
@@ -77,6 +85,8 @@ static void process_tree(struct rev_info *revs,
 	enum interesting match = revs->diffopt.pathspec.nr == 0 ?
 		all_entries_interesting: entry_not_interesting;
 	int baselen = base->len;
+	int gently = revs->ignore_missing_links ||
+		     revs->exclude_promisor_objects;
 
 	if (!revs->tree_objects)
 		return;
@@ -84,9 +94,13 @@ static void process_tree(struct rev_info *revs,
 		die("bad tree object");
 	if (obj->flags & (UNINTERESTING | SEEN))
 		return;
-	if (parse_tree_gently(tree, revs->ignore_missing_links) < 0) {
+	if (parse_tree_gently(tree, gently) < 0) {
 		if (revs->ignore_missing_links)
 			return;
+		if (revs->exclude_promisor_objects &&
+		    is_promisor_object(&obj->oid)) {
+			return;
+		}
 		die("bad tree object %s", oid_to_hex(&obj->oid));
 	}
 

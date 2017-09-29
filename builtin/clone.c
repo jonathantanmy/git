@@ -1179,6 +1179,7 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 		git_config_set("core.repositoryformatversion", "1");
 		git_config_set("extensions.partialclone", "origin");
 		repository_format_partial_clone = "origin";
+		git_config_set("remote.origin.blobmaxbytes", blob_max_bytes);
 	}
 
 	if (is_local)

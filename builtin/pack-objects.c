@@ -26,6 +26,8 @@
 #include "argv-array.h"
 #include "mru.h"
 #include "packfile.h"
+#include "pkt-line.h"
+#include "varint.h"
 
 static const char *pack_usage[] = {
 	N_("git pack-objects --stdout [<options>...] [< <ref-list> | < <object-list>]"),
@@ -80,6 +82,8 @@ static unsigned long max_delta_cache_size = 256 * 1024 * 1024;
 static unsigned long cache_max_small_delta_size = 1000;
 
 static unsigned long window_memory_limit = 0;
+
+static long blob_max_bytes = -1;
 
 /*
  * stats
@@ -1072,6 +1076,27 @@ static const char no_closure_warning[] = N_(
 "disabling bitmap writing, as some objects are not being packed"
 );
 
+/*
+ * Returns 1 if the given blob does not meet any defined blob size
+ * limits.  Blobs that appear as a tree entry whose basename begins with
+ * ".git" are never considered oversized.
+ */
+static int oversized(const unsigned char *sha1, const char *name) {
+	const char *last_slash, *basename;
+	unsigned long size;
+
+	if (blob_max_bytes < 0)
+		return 0;
+
+	last_slash = strrchr(name, '/');
+	basename = last_slash ? last_slash + 1 : name;
+	if (starts_with(basename, ".git"))
+		return 0;
+
+	sha1_object_info(sha1, &size);
+	return size > blob_max_bytes;
+}
+
 static int add_object_entry(const unsigned char *sha1, enum object_type type,
 			    const char *name, int preferred_base)
 {
@@ -1082,7 +1107,8 @@ static int add_object_entry(const unsigned char *sha1, enum object_type type,
 	if (have_duplicate_entry(sha1, preferred_base, &index_pos))
 		return 0;
 
-	if (ignore_object(sha1, preferred_base, &found_pack, &found_offset)) {
+	if (ignore_object(sha1, preferred_base, &found_pack, &found_offset) ||
+	    (!preferred_base && type == OBJ_BLOB && oversized(sha1, name))) {
 		/* The pack is missing an object, so it will not have closure */
 		if (write_bitmap_index) {
 			warning(_(no_closure_warning));
@@ -2956,6 +2982,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 			 N_("write a bitmap index together with the pack index")),
 		OPT_BOOL(0, "exclude-promisor-objects", &exclude_promisor_objects,
 			 N_("do not pack objects in promisor packfiles")),
+		OPT_MAGNITUDE(0, "blob-max-bytes", &blob_max_bytes,
+			      N_("exclude blobs larger than this")),
 		OPT_END(),
 	};
 
@@ -3054,7 +3082,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 		use_bitmap_index = use_bitmap_index_default;
 
 	/* "hard" reasons not to use bitmaps; these just won't work at all */
-	if (!use_internal_rev_list || (!pack_to_stdout && write_bitmap_index) || is_repository_shallow())
+	if (!use_internal_rev_list || (!pack_to_stdout && write_bitmap_index) ||
+	    is_repository_shallow() || (blob_max_bytes >= 0))
 		use_bitmap_index = 0;
 
 	if (pack_to_stdout || !rev_list_all)

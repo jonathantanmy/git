@@ -143,6 +143,14 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix)
 			args.update_shallow = 1;
 			continue;
 		}
+		if (!strcmp("--from-promisor", arg)) {
+			args.from_promisor = 1;
+			continue;
+		}
+		if (!strcmp("--no-haves", arg)) {
+			args.no_haves = 1;
+			continue;
+		}
 		usage(fetch_pack_usage);
 	}
 	if (deepen_not.nr)

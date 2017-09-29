@@ -55,6 +55,7 @@ static int recurse_submodules_default = RECURSE_SUBMODULES_ON_DEMAND;
 static int shown_url = 0;
 static int refmap_alloc, refmap_nr;
 static const char **refmap_array;
+static const char *blob_max_bytes;
 
 static int git_fetch_config(const char *k, const char *v, void *cb)
 {
@@ -160,6 +161,8 @@ static struct option builtin_fetch_options[] = {
 			TRANSPORT_FAMILY_IPV4),
 	OPT_SET_INT('6', "ipv6", &family, N_("use IPv6 addresses only"),
 			TRANSPORT_FAMILY_IPV6),
+	OPT_STRING(0, "blob-max-bytes", &blob_max_bytes, N_("bytes"),
+		   N_("do not fetch blobs above this size")),
 	OPT_END()
 };
 
@@ -1044,6 +1047,10 @@ static struct transport *prepare_transport(struct remote *remote, int deepen)
 		set_option(transport, TRANS_OPT_DEEPEN_RELATIVE, "yes");
 	if (update_shallow)
 		set_option(transport, TRANS_OPT_UPDATE_SHALLOW, "yes");
+	if (blob_max_bytes) {
+		set_option(transport, TRANS_OPT_BLOB_MAX_BYTES, blob_max_bytes);
+		set_option(transport, TRANS_OPT_FROM_PROMISOR, "1");
+	}
 	return transport;
 }
 
@@ -1328,6 +1335,8 @@ int cmd_fetch(int argc, const char **argv, const char *prefix)
 
 	packet_trace_identity("fetch");
 
+	fetch_if_missing = 0;
+
 	/* Record the command line for the reflog */
 	strbuf_addstr(&default_rla, "fetch");
 	for (i = 1; i < argc; i++)
@@ -1361,6 +1370,9 @@ int cmd_fetch(int argc, const char **argv, const char *prefix)
 	if (depth || deepen_since || deepen_not.nr)
 		deepen = 1;
 
+	if (blob_max_bytes && !repository_format_partial_clone)
+		die("--blob-max-bytes can only be used when extensions.partialClone is set");
+
 	if (all) {
 		if (argc == 1)
 			die(_("fetch --all does not take a repository argument"));
@@ -1390,10 +1402,16 @@ int cmd_fetch(int argc, const char **argv, const char *prefix)
 		}
 	}
 
-	if (remote)
+	if (remote) {
+		if (blob_max_bytes &&
+		    strcmp(remote->name, repository_format_partial_clone))
+			die(_("--blob-max-bytes can only be used with the remote configured in core.partialClone"));
 		result = fetch_one(remote, argc, argv);
-	else
+	} else {
+		if (blob_max_bytes)
+			die(_("--blob-max-bytes can only be used with the remote configured in core.partialClone"));
 		result = fetch_multiple(&list);
+	}
 
 	if (!result && (recurse_submodules != RECURSE_SUBMODULES_OFF)) {
 		struct argv_array options = ARGV_ARRAY_INIT;

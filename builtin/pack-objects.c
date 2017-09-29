@@ -75,6 +75,8 @@ static int use_bitmap_index = -1;
 static int write_bitmap_index;
 static uint16_t write_bitmap_options;
 
+static int exclude_promisor_objects;
+
 static unsigned long delta_cache_size = 0;
 static unsigned long max_delta_cache_size = 256 * 1024 * 1024;
 static unsigned long cache_max_small_delta_size = 1000;
@@ -2972,6 +2974,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 		OPT_PARSE_LIST_OBJECTS_FILTER(&filter_options),
 		OPT_BOOL(0, "filter-ignore-missing", &arg_ignore_missing,
 			 N_("ignore and omit missing objects from packfile")),
+		OPT_BOOL(0, "exclude-promisor-objects", &exclude_promisor_objects,
+			 N_("do not pack objects in promisor packfiles")),
 		OPT_END(),
 	};
 
@@ -3015,6 +3019,12 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 	if (rev_list_unpacked) {
 		use_internal_rev_list = 1;
 		argv_array_push(&rp, "--unpacked");
+	}
+
+	if (exclude_promisor_objects) {
+		use_internal_rev_list = 1;
+		fetch_if_missing = 0;
+		argv_array_push(&rp, "--exclude-promisor-objects");
 	}
 
 	if (!reuse_object)

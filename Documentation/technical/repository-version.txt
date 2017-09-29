@@ -86,3 +86,15 @@ for testing format-1 compatibility.
 When the config key `extensions.preciousObjects` is set to `true`,
 objects in the repository MUST NOT be deleted (e.g., by `git-prune` or
 `git repack -d`).
+
+`partialClone`
+~~~~~~~~~~~~~~
+
+When the config key `extensions.partialClone` is set, a remote is
+designated as a "promisor remote". Objects referenced by packed objects
+obtained from that promisor remote do not need to be in the local repo.
+Instead, the promisor remote promises that all such objects can be
+fetched from it in the future, and Git will fetch those objects when
+needed.
+
+The value of this key is the name of the aforementioned promisor remote.

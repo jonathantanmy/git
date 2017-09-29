@@ -212,6 +212,7 @@ out of what the server said it could do with the first 'want' line.
   upload-request    =  want-list
 		       *shallow-line
 		       *1depth-request
+		       *1blob-max-bytes
 		       flush-pkt
 
   want-list         =  first-want
@@ -223,10 +224,14 @@ out of what the server said it could do with the first 'want' line.
 		       PKT-LINE("deepen-since" SP timestamp) /
 		       PKT-LINE("deepen-not" SP ref)
 
+  blob-max-bytes    =  PKT-LINE("blob-max-bytes" SP magnitude)
+
   first-want        =  PKT-LINE("want" SP obj-id SP capability-list)
   additional-want   =  PKT-LINE("want" SP obj-id)
 
   depth             =  1*DIGIT
+
+  magnitude         =  1*DIGIT
 ----
 
 Clients MUST send all the obj-ids it wants from the reference
@@ -248,6 +253,10 @@ any commits beyond this depth, nor does it want objects needed only to
 complete those commits. Commits whose parents are not received as a
 result are defined as shallow and marked as such in the server. This
 information is sent back to the client in the next step.
+
+The client can optionally request a partial packfile that omits blobs
+above a certain size threshold using "blob-max-bytes". Files whose names
+start with ".git" are always included in the packfile, however.
 
 Once all the 'want's and 'shallow's (and optional 'deepen') are
 transferred, clients MUST send a flush-pkt, to tell the server side

@@ -63,6 +63,8 @@ static int use_sideband;
 static int advertise_refs;
 static int stateless_rpc;
 static const char *pack_objects_hook;
+static int advertise_blob_max_bytes;
+static char *blob_max_bytes;
 
 static void reset_timeout(void)
 {
@@ -131,6 +133,8 @@ static void create_pack_file(void)
 		argv_array_push(&pack_objects.args, "--delta-base-offset");
 	if (use_include_tag)
 		argv_array_push(&pack_objects.args, "--include-tag");
+	if (blob_max_bytes)
+		argv_array_push(&pack_objects.args, blob_max_bytes);
 
 	pack_objects.in = -1;
 	pack_objects.out = -1;
@@ -794,6 +798,13 @@ static void receive_needs(void)
 			deepen_rev_list = 1;
 			continue;
 		}
+		if (skip_prefix(line, "blob-max-bytes ", &arg)) {
+			unsigned long s;
+			if (!git_parse_ulong(arg, &s))
+				die("git upload-pack: invalid blob-max-bytes value: %s", line);
+			blob_max_bytes = xstrfmt("--blob-max-bytes=%lu", s);
+			continue;
+		}
 		if (!skip_prefix(line, "want ", &arg) ||
 		    get_oid_hex(arg, &oid_buf))
 			die("git upload-pack: protocol error, "
@@ -940,7 +951,7 @@ static int send_ref(const char *refname, const struct object_id *oid,
 		struct strbuf symref_info = STRBUF_INIT;
 
 		format_symref_info(&symref_info, cb_data);
-		packet_write_fmt(1, "%s %s%c%s%s%s%s%s agent=%s\n",
+		packet_write_fmt(1, "%s %s%c%s%s%s%s%s%s agent=%s\n",
 			     oid_to_hex(oid), refname_nons,
 			     0, capabilities,
 			     (allow_unadvertised_object_request & ALLOW_TIP_SHA1) ?
@@ -949,6 +960,7 @@ static int send_ref(const char *refname, const struct object_id *oid,
 				     " allow-reachable-sha1-in-want" : "",
 			     stateless_rpc ? " no-done" : "",
 			     symref_info.buf,
+			     advertise_blob_max_bytes ? " blob-max-bytes" : "",
 			     git_user_agent_sanitized());
 		strbuf_release(&symref_info);
 	} else {
@@ -1028,6 +1040,8 @@ static int upload_pack_config(const char *var, const char *value, void *unused)
 	} else if (current_config_scope() != CONFIG_SCOPE_REPO) {
 		if (!strcmp("uploadpack.packobjectshook", var))
 			return git_config_string(&pack_objects_hook, var, value);
+	} else if (!strcmp("uploadpack.advertiseblobmaxbytes", var)) {
+		advertise_blob_max_bytes = git_config_bool(var, value);
 	}
 	return parse_hide_refs_config(var, value, "uploadpack");
 }

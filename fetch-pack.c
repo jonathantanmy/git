@@ -26,6 +26,7 @@ static int prefer_ofs_delta = 1;
 static int no_done;
 static int deepen_since_ok;
 static int deepen_not_ok;
+static int blob_max_bytes_ok;
 static int fetch_fsck_objects = -1;
 static int transfer_fsck_objects = -1;
 static int agent_supported;
@@ -406,6 +407,13 @@ static int find_common(struct fetch_pack_args *args,
 			struct string_list_item *s = args->deepen_not->items + i;
 			packet_buf_write(&req_buf, "deepen-not %s", s->string);
 		}
+	}
+	if (args->blob_max_bytes) {
+		if (blob_max_bytes_ok)
+			packet_buf_write(&req_buf, "blob-max-bytes %ld",
+					 *args->blob_max_bytes);
+		else
+			warning("blob-max-bytes not recognized by server, ignoring");
 	}
 	packet_buf_flush(&req_buf);
 	state_len = req_buf.len;
@@ -983,6 +991,8 @@ static struct ref *do_fetch_pack(struct fetch_pack_args *args,
 		die(_("Server does not support --shallow-exclude"));
 	if (!server_supports("deepen-relative") && args->deepen_relative)
 		die(_("Server does not support --deepen"));
+	if (server_supports("blob-max-bytes"))
+		blob_max_bytes_ok = 1;
 
 	if (everything_local(args, &ref, sought, nr_sought)) {
 		packet_flush(fd[1]);
@@ -1169,6 +1179,7 @@ struct ref *fetch_pack(struct fetch_pack_args *args,
 		packet_flush(fd[1]);
 		die(_("no matching remote head"));
 	}
+
 	prepare_shallow_info(&si, shallow);
 	ref_cpy = do_fetch_pack(args, fd, ref, sought, nr_sought,
 				&si, pack_lockfile);

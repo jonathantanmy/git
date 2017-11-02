@@ -466,6 +466,8 @@ set by Git if the remote helper has the 'option' capability.
 	Transmit <string> as a push option. As the push option
 	must not contain LF or NUL characters, the string is not encoded.
 
+TODO document 'option from-promisor' and 'option no-haves' ?
+
 SEE ALSO
 --------
 linkgit:git-remote[1]

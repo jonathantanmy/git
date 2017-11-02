@@ -24,6 +24,7 @@ struct options {
 	char *deepen_since;
 	struct string_list deepen_not;
 	struct string_list push_options;
+	char *filter;
 	unsigned progress : 1,
 		check_self_contained_and_connected : 1,
 		cloning : 1,
@@ -167,7 +168,9 @@ static int set_option(const char *name, const char *value)
 	} else if (!strcmp(name, "no-haves")) {
 		options.no_haves = 1;
 		return 0;
-
+	} else if (!strcmp(name, "filter")) {
+		options.filter = xstrdup(value);;
+		return 0;
 	} else {
 		return 1 /* unsupported */;
 	}
@@ -837,6 +840,8 @@ static int fetch_git(struct discovery *heads,
 		argv_array_push(&args, "--from-promisor");
 	if (options.no_haves)
 		argv_array_push(&args, "--no-haves");
+	if (options.filter)
+		argv_array_pushf(&args, "--filter=%s", options.filter);
 	argv_array_push(&args, url.buf);
 
 	for (i = 0; i < nr_heads; i++) {

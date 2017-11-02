@@ -13,6 +13,7 @@
 #include "tree-walk.h"
 #include "sha1-array.h"
 #include "packfile.h"
+#include "partial-clone-utils.h"
 
 struct batch_options {
 	int enabled;
@@ -475,6 +476,8 @@ static int batch_objects(struct batch_options *opt)
 
 		for_each_loose_object(batch_loose_object, &sa, 0);
 		for_each_packed_object(batch_packed_object, &sa, 0);
+		if (is_partial_clone_registered())
+			warning("This repository has partial clone enabled. Some objects may not be loaded.");
 
 		cb.opt = opt;
 		cb.expand = &data;

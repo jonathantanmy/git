@@ -15,6 +15,7 @@
 #include "progress.h"
 #include "reflog-walk.h"
 #include "oidset.h"
+#include "packfile.h"
 
 static const char rev_list_usage[] =
 "git rev-list [OPTION] <commit-id>... [ -- paths... ]\n"
@@ -60,6 +61,7 @@ static unsigned progress_counter;
 static struct list_objects_filter_options filter_options;
 static struct oidset missing_objects;
 static struct oidset omitted_objects;
+static int arg_exclude_promisor_objects;
 static int arg_print_missing;
 static int arg_print_omitted;
 static int arg_ignore_missing;
@@ -190,27 +192,39 @@ static void finish_commit(struct commit *commit, void *data)
 	free_commit_buffer(commit);
 }
 
-static void finish_object(struct object *obj, const char *name, void *cb_data)
+static int finish_object(struct object *obj, const char *name, void *cb_data)
 {
 	struct rev_list_info *info = cb_data;
 	if (obj->type == OBJ_BLOB && !has_object_file(&obj->oid)) {
+		/*
+		 * If "--exclude-promisor-objects", we try to dynamically
+		 * fetch missing objects.  Whether we tried or not, we do
+		 * not have the object.  We can then either print, ignore,
+		 * or conditionally ignore them.
+		 */
 		if (arg_print_missing) {
 			oidset_insert(&missing_objects, &obj->oid);
-			return;
+			return 1;
 		}
 		if (arg_ignore_missing)
-			return;
+			return 1;
+
+		if (arg_exclude_promisor_objects &&
+		    is_promisor_object(&obj->oid))
+			return 1;
 
 		die("missing blob object '%s'", oid_to_hex(&obj->oid));
 	}
 	if (info->revs->verify_objects && !obj->parsed && obj->type != OBJ_COMMIT)
 		parse_object(&obj->oid);
+	return 0;
 }
 
 static void show_object(struct object *obj, const char *name, void *cb_data)
 {
 	struct rev_list_info *info = cb_data;
-	finish_object(obj, name, cb_data);
+	if (finish_object(obj, name, cb_data))
+		return;
 	display_progress(progress, ++progress_counter);
 	if (info->flags & REV_LIST_QUIET)
 		return;
@@ -307,6 +321,19 @@ int cmd_rev_list(int argc, const char **argv, const char *prefix)
 	init_revisions(&revs, prefix);
 	revs.abbrev = DEFAULT_ABBREV;
 	revs.commit_format = CMIT_FMT_UNSPECIFIED;
+
+	/*
+	 * Scan the argument list before invoking setup_revisions(), so that we
+	 * know if fetch_if_missing needs to be set to 0.
+	 */
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--exclude-promisor-objects")) {
+			fetch_if_missing = 0;
+			arg_exclude_promisor_objects = 1;
+			break;
+		}
+	}
+
 	argc = setup_revisions(argc, argv, &revs, NULL);
 
 	memset(&info, 0, sizeof(info));

@@ -15,6 +15,8 @@
 #include "diff.h"
 #include "revision.h"
 #include "list-objects.h"
+#include "list-objects-filter.h"
+#include "list-objects-filter-options.h"
 #include "pack-objects.h"
 #include "progress.h"
 #include "refs.h"
@@ -78,6 +80,9 @@ static unsigned long max_delta_cache_size = 256 * 1024 * 1024;
 static unsigned long cache_max_small_delta_size = 1000;
 
 static unsigned long window_memory_limit = 0;
+
+static struct list_objects_filter_options filter_options;
+static int arg_ignore_missing;
 
 /*
  * stats
@@ -2547,6 +2552,15 @@ static void show_commit(struct commit *commit, void *data)
 
 static void show_object(struct object *obj, const char *name, void *data)
 {
+	/*
+	 * Quietly ignore missing objects when they are expected.  This
+	 * avoids staging them and getting an odd error later.  If we are
+	 * not expecting them, stage it and let the normal error handling
+	 * deal with it.
+	 */
+	if (arg_ignore_missing && !has_object_file(&obj->oid))
+		return;
+
 	add_preferred_base_object(name);
 	add_object_entry(obj->oid.hash, obj->type, name, 0);
 	obj->flags |= OBJECT_ADDED;
@@ -2816,7 +2830,10 @@ static void get_object_list(int ac, const char **av)
 	if (prepare_revision_walk(&revs))
 		die("revision walk setup failed");
 	mark_edges_uninteresting(&revs, show_edge);
-	traverse_commit_list(&revs, show_commit, show_object, NULL);
+
+	traverse_commit_list_filtered(&filter_options, &revs,
+				      show_commit, show_object, NULL,
+				      NULL);
 
 	if (unpack_unreachable_expiration) {
 		revs.ignore_missing_links = 1;
@@ -2952,6 +2969,9 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 			 N_("use a bitmap index if available to speed up counting objects")),
 		OPT_BOOL(0, "write-bitmap-index", &write_bitmap_index,
 			 N_("write a bitmap index together with the pack index")),
+		OPT_PARSE_LIST_OBJECTS_FILTER(&filter_options),
+		OPT_BOOL(0, "filter-ignore-missing", &arg_ignore_missing,
+			 N_("ignore and omit missing objects from packfile")),
 		OPT_END(),
 	};
 
@@ -3027,6 +3047,12 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 		die("--keep-unreachable and --unpack-unreachable are incompatible.");
 	if (!rev_list_all || !rev_list_reflog || !rev_list_index)
 		unpack_unreachable_expiration = 0;
+
+	if (filter_options.choice) {
+		if (!pack_to_stdout)
+			die("cannot use filtering with an indexable pack.");
+		use_bitmap_index = 0;
+	}
 
 	/*
 	 * "soft" reasons not to use bitmaps - for on-disk repack by default we want

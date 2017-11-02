@@ -246,6 +246,10 @@ So does `git bundle` (see linkgit:git-bundle[1]) when it creates a bundle.
 	Ignore missing objects without error.  This may be used with
 	or without and of the above filtering.
 
+--exclude-promisor-objects::
+	Silently omit referenced but missing objects from the packfile.
+	This is used with partial clone.
+
 SEE ALSO
 --------
 linkgit:git-rev-list[1]

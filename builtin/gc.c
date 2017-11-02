@@ -20,6 +20,7 @@
 #include "argv-array.h"
 #include "commit.h"
 #include "packfile.h"
+#include "partial-clone-utils.h"
 
 #define FAILED_RUN "failed to run %s"
 
@@ -458,6 +459,9 @@ int cmd_gc(int argc, const char **argv, const char *prefix)
 			argv_array_push(&prune, prune_expire);
 			if (quiet)
 				argv_array_push(&prune, "--no-progress");
+			if (is_partial_clone_registered())
+				argv_array_push(&prune,
+						"--exclude-promisor-objects");
 			if (run_command_v_opt(prune.argv, RUN_GIT_CMD))
 				return error(FAILED_RUN, prune.argv[0]);
 		}

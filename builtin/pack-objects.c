@@ -83,6 +83,7 @@ static unsigned long window_memory_limit = 0;
 
 static struct list_objects_filter_options filter_options;
 static int arg_ignore_missing;
+static int arg_exclude_promisor_objects;
 
 /*
  * stats
@@ -2561,6 +2562,11 @@ static void show_object(struct object *obj, const char *name, void *data)
 	if (arg_ignore_missing && !has_object_file(&obj->oid))
 		return;
 
+	if (arg_exclude_promisor_objects &&
+	    !has_object_file(&obj->oid) &&
+	    is_promisor_object(&obj->oid))
+		return;
+
 	add_preferred_base_object(name);
 	add_object_entry(obj->oid.hash, obj->type, name, 0);
 	obj->flags |= OBJECT_ADDED;
@@ -2972,6 +2978,8 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 		OPT_PARSE_LIST_OBJECTS_FILTER(&filter_options),
 		OPT_BOOL(0, "filter-ignore-missing", &arg_ignore_missing,
 			 N_("ignore and omit missing objects from packfile")),
+		OPT_BOOL(0, "exclude-promisor-objects", &arg_exclude_promisor_objects,
+			 N_("do not pack objects in promisor packfiles")),
 		OPT_END(),
 	};
 
@@ -3015,6 +3023,12 @@ int cmd_pack_objects(int argc, const char **argv, const char *prefix)
 	if (rev_list_unpacked) {
 		use_internal_rev_list = 1;
 		argv_array_push(&rp, "--unpacked");
+	}
+
+	if (arg_exclude_promisor_objects) {
+		use_internal_rev_list = 1;
+		fetch_if_missing = 0;
+		argv_array_push(&rp, "--exclude-promisor-objects");
 	}
 
 	if (!reuse_object)

@@ -860,12 +860,16 @@ extern int grafts_replace_parents;
 #define GIT_REPO_VERSION 0
 #define GIT_REPO_VERSION_READ 1
 extern int repository_format_precious_objects;
+extern char *repository_format_partial_clone_remote;
+extern char *repository_format_partial_clone_filter;
 
 struct repository_format {
 	int version;
 	int precious_objects;
 	int is_bare;
 	char *work_tree;
+	char *partial_clone_remote; /* value of extensions.partialcloneremote */
+	char *partial_clone_filter; /* value of extensions.partialclonefilter */
 	struct string_list unknown_extensions;
 };
 

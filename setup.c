@@ -420,6 +420,19 @@ static int check_repo_format(const char *var, const char *value, void *vdata)
 			;
 		else if (!strcmp(ext, "preciousobjects"))
 			data->precious_objects = git_config_bool(var, value);
+
+		else if (!strcmp(ext, KEY_PARTIALCLONEREMOTE))
+			if (!value)
+				return config_error_nonbool(var);
+			else
+				data->partial_clone_remote = xstrdup(value);
+
+		else if (!strcmp(ext, KEY_PARTIALCLONEFILTER))
+			if (!value)
+				return config_error_nonbool(var);
+			else
+				data->partial_clone_filter = xstrdup(value);
+
 		else
 			string_list_append(&data->unknown_extensions, ext);
 	} else if (strcmp(var, "core.bare") == 0) {
@@ -463,6 +476,8 @@ static int check_repository_format_gently(const char *gitdir, int *nongit_ok)
 	}
 
 	repository_format_precious_objects = candidate.precious_objects;
+	repository_format_partial_clone_remote = candidate.partial_clone_remote;
+	repository_format_partial_clone_filter = candidate.partial_clone_filter;
 	string_list_clear(&candidate.unknown_extensions, 0);
 	if (!has_common) {
 		if (candidate.is_bare != -1) {

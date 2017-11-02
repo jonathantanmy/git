@@ -34,6 +34,9 @@ struct config_options {
 	const char *git_dir;
 };
 
+#define KEY_PARTIALCLONEREMOTE "partialcloneremote"
+#define KEY_PARTIALCLONEFILTER "partialclonefilter"
+
 typedef int (*config_fn_t)(const char *, const char *, void *);
 extern int git_default_config(const char *, const char *, void *);
 extern int git_config_from_file(config_fn_t fn, const char *, void *);

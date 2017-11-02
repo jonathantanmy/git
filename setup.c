@@ -420,19 +420,16 @@ static int check_repo_format(const char *var, const char *value, void *vdata)
 			;
 		else if (!strcmp(ext, "preciousobjects"))
 			data->precious_objects = git_config_bool(var, value);
-
 		else if (!strcmp(ext, KEY_PARTIALCLONEREMOTE))
 			if (!value)
 				return config_error_nonbool(var);
 			else
 				data->partial_clone_remote = xstrdup(value);
-
 		else if (!strcmp(ext, KEY_PARTIALCLONEFILTER))
 			if (!value)
 				return config_error_nonbool(var);
 			else
 				data->partial_clone_filter = xstrdup(value);
-
 		else
 			string_list_append(&data->unknown_extensions, ext);
 	} else if (strcmp(var, "core.bare") == 0) {

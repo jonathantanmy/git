@@ -55,4 +55,10 @@ int opt_parse_list_objects_filter(const struct option *opt,
 	  N_("object filtering"), PARSE_OPT_NONEG, \
 	  opt_parse_list_objects_filter }
 
+void partial_clone_register(
+	const char *remote,
+	const struct list_objects_filter_options *filter_options);
+void partial_clone_get_default_filter_spec(
+	struct list_objects_filter_options *filter_options);
+
 #endif /* LIST_OBJECTS_FILTER_OPTIONS_H */

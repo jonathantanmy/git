@@ -782,7 +782,7 @@ test_expect_success 'filtering by size has no effect if support for it is not ad
 	test_i18ngrep "filtering not recognized by server" err
 '
 
-fetch_blob_max_bytes () {
+fetch_filter_blob_limit_zero () {
 	SERVER="$1"
 	URL="$2"
 
@@ -804,15 +804,15 @@ fetch_blob_max_bytes () {
 	test_must_fail git -C client cat-file -e $(git hash-object "$SERVER/two.t")
 }
 
-test_expect_success 'fetch with --blob-max-bytes' '
-	fetch_blob_max_bytes server server
+test_expect_success 'fetch with --filter=blob:limit=0' '
+	fetch_filter_blob_limit_zero server server
 '
 
 . "$TEST_DIRECTORY"/lib-httpd.sh
 start_httpd
 
-test_expect_success 'fetch with --blob-max-bytes and HTTP' '
-	fetch_blob_max_bytes "$HTTPD_DOCUMENT_ROOT_PATH/server" "$HTTPD_URL/smart/server"
+test_expect_success 'fetch with --filter=blob:limit=0 and HTTP' '
+	fetch_filter_blob_limit_zero "$HTTPD_DOCUMENT_ROOT_PATH/server" "$HTTPD_URL/smart/server"
 '
 
 stop_httpd

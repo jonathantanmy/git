@@ -1180,30 +1180,30 @@ int sha1_object_info_extended(const unsigned char *sha1, struct object_info *oi,
 		}
 	}
 
-retry:
-	if (find_pack_entry(real, &e))
-		goto found_packed;
+	while (1) {
+		if (find_pack_entry(real, &e))
+			break;
 
-	/* Most likely it's a loose object. */
-	if (!sha1_loose_object_info(real, oi, flags))
-		return 0;
+		/* Most likely it's a loose object. */
+		if (!sha1_loose_object_info(real, oi, flags))
+			return 0;
 
-	/* Not a loose object; someone else may have just packed it. */
-	reprepare_packed_git();
-	if (find_pack_entry(real, &e))
-		goto found_packed;
+		/* Not a loose object; someone else may have just packed it. */
+		reprepare_packed_git();
+		if (find_pack_entry(real, &e))
+			break;
 
-	/* Check if it is a missing object */
-	if (fetch_if_missing && repository_format_partial_clone &&
-	    !already_retried) {
-		fetch_object(repository_format_partial_clone, real);
-		already_retried = 1;
-		goto retry;
+		/* Check if it is a missing object */
+		if (fetch_if_missing && repository_format_partial_clone &&
+		    !already_retried) {
+			fetch_object(repository_format_partial_clone, real);
+			already_retried = 1;
+			continue;
+		}
+
+		return -1;
 	}
 
-	return -1;
-
-found_packed:
 	if (oi == &blank_oi)
 		/*
 		 * We know that the caller doesn't actually need the

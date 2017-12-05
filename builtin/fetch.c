@@ -1372,7 +1372,7 @@ int cmd_fetch(int argc, const char **argv, const char *prefix)
 		deepen = 1;
 
 	if (filter_options.choice && !repository_format_partial_clone)
-		die("--blob-max-bytes can only be used when extensions.partialClone is set");
+		die("--filter can only be used when extensions.partialClone is set");
 
 	if (all) {
 		if (argc == 1)
@@ -1406,11 +1406,11 @@ int cmd_fetch(int argc, const char **argv, const char *prefix)
 	if (remote) {
 		if (filter_options.choice &&
 		    strcmp(remote->name, repository_format_partial_clone))
-			die(_("--blob-max-bytes can only be used with the remote configured in core.partialClone"));
+			die(_("--filter can only be used with the remote configured in core.partialClone"));
 		result = fetch_one(remote, argc, argv);
 	} else {
 		if (filter_options.choice)
-			die(_("--blob-max-bytes can only be used with the remote configured in core.partialClone"));
+			die(_("--filter can only be used with the remote configured in core.partialClone"));
 		result = fetch_multiple(&list);
 	}
 

@@ -1,0 +1,164 @@
+Partial Clone Design Notes
+==========================
+
+The "Partial Clone" feature is a performance optimization for git that
+allows git to function without having a complete copy of the repository.
+
+During clone and fetch operations, git normally downloads the complete
+contents and history of the repository.  That is, during clone the client
+receives all of the commits, trees, and blobs in the repository into a
+local ODB.  Subsequent fetches extend the local ODB with any new objects.
+For large repositories, this can take significant time to download and
+large amounts of diskspace to store.
+
+The goal of this work is to allow git better handle extremely large
+repositories.  Often in these repositories there are many files that the
+user does not need such as ancient versions of source files, files in
+portions of the worktree outside of the user's work area, or large binary
+assets.  If we can avoid downloading such unneeded objects *in advance*
+during clone and fetch operations, we can decrease download times and
+reduce ODB disk usage.
+
+
+Non-Goals
+---------
+
+Partial clone is independent of and not intended to conflict with
+shallow-clone, refspec, or limited-ref mechanisms since these all operate
+at the DAG level whereas partial clone and fetch works *within* the set
+of commits already chosen for download.
+
+
+Design Overview
+---------------
+
+Partial clone logically consists of the following parts:
+
+- A mechanism for the client to describe unneeded or unwanted objects to
+  the server.
+
+- A mechanism for the server to omit such unwanted objects from packfiles
+  sent to the client.
+
+- A mechanism for the client to gracefully handle missing objects (that
+  were previously omitted by the server).
+
+- A mechanism for the client to backfill missing objects as needed.
+
+
+Design Details
+--------------
+
+- A new pack-protocol capability "filter" is added to the fetch-pack and
+  upload-pack negotiation.
+
+  This uses the existing capability discovery mechanism.
+  See "filter" in Documentation/technical/pack-protocol.txt.
+
+- Clients pass a "filter-spec" to clone and fetch which is passed to the
+  server to request filtering during packfile construction.
+
+  There are various filters available to accomodate different situations.
+  See "--filter=<filter-spec>" in Documentation/rev-list-options.txt.
+
+- On the server pack-objects applies the requested filter-spec as it
+  creates "filtered" packfiles for the client.
+
+  These filtered packfiles are incomplete in the traditional sense because
+  they may contain trees that reference blobs that the client does not have.
+
+- On the client fetch-pack and index-pack mark these filtered packfiles as
+  "promisor packfiles" in the ODB (similar to how packfiles can be marked
+  "keep").
+
+- During object lookup, missing objects referenced from a promisor
+  packfile are treated as a "known missing" object rather than a corruption.
+
+  Since known missing objects can be distinguished from corruptions, there
+  is no need to explicitly maintain an expensive list of missing objects on
+  the client.
+
+- On the client Consistency checks in fsck and gc are modified to not
+  complain about known missing objects.
+
+- On the client a "fetch-object" mechanism is added to object lookup to
+  dynamically fetch known missing objects from the server.
+
+  This allows commands like checkout and diff to "backfill" missing objects
+  to expand the subset of the repository present locally.  This allows
+  objects to be "faulted in" from the server without complicated prediction
+  algorithms.
+
+- On the client unpack-trees now dynamically bulk fetches missing objects
+  using the new fetch-objects during checkout.
+
+- Alternatively, rev-list is updated to print filtered or missing objects
+  and can be used with more general batch fetch scripts.
+
+  See "--filter-print-omitted" in Documentation/rev-list-options.txt.
+  See "--missing=print" in Documentation/rev-list-options.txt.
+
+- On the client a repository extension is added to the local config to
+  prevent older versions of git from failing mid-operation because of
+  missing objects.
+
+
+Current Limitations
+-------------------
+
+- The remote used for a partial clone (or the first partial fetch
+  following a regular clone) is marked as the "promisor remote".
+
+  We are currently limited to a single promisor remote and only that
+  remote may be used for subsequent partial fetches.
+
+- Dynamic object fetching will only ask the promisor remote for missing
+  objects.  We assume that the promisor remote has a complete view of the
+  repository and can satisfy all such requests.
+
+  Future work may lift this restriction when we figure out how to route
+  such requests.  The current assumption is that partial clone will not be
+  used for triangular workflows that would need that (at least initially).
+
+- Repack essentially treats promisor and non-promisor packfiles as 2
+  distinct partitions and does not mix them.  Repack currently only works
+  on non-promisor packfiles and loose objects.
+
+  Future work may let repack work to repack promisor packfiles (while
+  keeping them in a different partition from the others).
+
+- TODO Talk about future work to support packfile bitmaps during filtering.
+
+- TODO Talk about future work of upgrading fetch-objects to use a long-running
+  process like Ben's patch series.
+
+- TODO Talk about future work of having the server "guess" the set of
+  related blobs when servicing a dynamic object fetch.
+
+- TODO Talk about loose promisor objects.
+
+- TODO Talk about info/refs and need for V2.
+
+
+Related Links
+-------------
+[0] https://bugs.chromium.org/p/git/issues/detail?id=2
+    Chromium work item for: Partial Clone 
+
+[1] https://public-inbox.org/git/20170113155253.1644-1-benpeart@microsoft.com/
+    Subject: [RFC] Add support for downloading blobs on demand
+    Date: Fri, 13 Jan 2017 10:52:53 -0500
+
+[2] https://public-inbox.org/git/cover.1506714999.git.jonathantanmy@google.com/
+    Subject: [PATCH 00/18] Partial clone (from clone to lazy fetch in 18 patches)
+    Date: Fri, 29 Sep 2017 13:11:36 -0700
+
+[3] https://public-inbox.org/git/20170426221346.25337-1-jonathantanmy@google.com/
+    Subject: Proposal for missing blob support in Git repos
+    Date: Wed, 26 Apr 2017 15:13:46 -0700
+
+[4] https://public-inbox.org/git/1488999039-37631-1-git-send-email-git@jeffhostetler.com/
+    Subject: [PATCH 00/10] RFC Partial Clone and Fetch
+    Date: Wed,  8 Mar 2017 18:50:29 +0000
+
+

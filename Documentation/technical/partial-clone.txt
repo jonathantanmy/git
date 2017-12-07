@@ -67,40 +67,71 @@ Design Details
   These filtered packfiles are incomplete in the traditional sense because
   they may contain trees that reference blobs that the client does not have.
 
-- On the client fetch-pack and index-pack mark these filtered packfiles as
-  "promisor packfiles" in the ODB (similar to how packfiles can be marked
-  "keep").
+==== How the local repository gracefully handles missing objects
 
-- During object lookup, missing objects referenced from a promisor
-  packfile are treated as a "known missing" object rather than a corruption.
+With partial clone, the fact that objects can be missing makes such
+repositories incompatible with older versions of Git, necessitating a
+repository extension (see the documentation of "extensions.partialClone"
+for more information).
 
-  Since known missing objects can be distinguished from corruptions, there
-  is no need to explicitly maintain an expensive list of missing objects on
-  the client.
+An object may be missing due to a partial clone or fetch, or missing due
+to repository corruption. To differentiate these cases, the local
+repository specially indicates packfiles obtained from the promisor
+remote. These "promisor packfiles" consist of a "<name>.promisor" file
+with arbitrary contents (like the "<name>.keep" files), in addition to
+their "<name>.pack" and "<name>.idx" files. (In the future, this ability
+may be extended to loose objects.)
 
-- On the client Consistency checks in fsck and gc are modified to not
-  complain about known missing objects.
+The local repository considers a "promisor object" to be an object that
+it knows (to the best of its ability) that the promisor remote has,
+either because the local repository has that object in one of its
+promisor packfiles, or because another promisor object refers to it. Git
+can then check if the missing object is a promisor object, and if yes,
+this situation is common and expected. This also means that there is no
+need to explicitly maintain an expensive-to-modify list of missing
+objects on the client.
 
-- On the client a "fetch-object" mechanism is added to object lookup to
-  dynamically fetch known missing objects from the server.
+Almost all Git code currently expects any objects referred to by other
+objects to be present. Therefore, a fallback mechanism is added:
+whenever Git attempts to read an object that is found to be missing, it
+will attempt to fetch it from the promisor remote, expanding the subset
+of objects available locally, then reattempt the read. This allows
+objects to be "faulted in" from the promisor remote without complicated
+prediction algorithms. For efficiency reasons, no check as to whether
+the missing object is a promisor object is performed. This tends to be
+slow as objects are fetched one at a time.
 
-  This allows commands like checkout and diff to "backfill" missing objects
-  to expand the subset of the repository present locally.  This allows
-  objects to be "faulted in" from the server without complicated prediction
-  algorithms.
+The fallback mechanism can be turned off and on through a global
+variable.
 
-- On the client unpack-trees now dynamically bulk fetches missing objects
-  using the new fetch-objects during checkout.
+checkout (and any other command using unpack-trees) has been taught to
+batch blob fetching. rev-list has been taught to be able to print
+filtered or missing objects and can be used with more general batch
+fetch scripts. In the future, Git commands will be updated to batch such
+fetches or otherwise handle missing objects more efficiently.
 
-- Alternatively, rev-list is updated to print filtered or missing objects
-  and can be used with more general batch fetch scripts.
+Fsck has been updated to be fully aware of promisor objects. The repack
+in GC has been updated to not touch promisor packfiles at all, and to
+only repack other objects.
 
-  See "--filter-print-omitted" in Documentation/rev-list-options.txt.
-  See "--missing=print" in Documentation/rev-list-options.txt.
+===== Fetching missing objects
 
-- On the client a repository extension is added to the local config to
-  prevent older versions of git from failing mid-operation because of
-  missing objects.
+Fetching of objects is done using the existing transport mechanism using
+transport_fetch_refs(), setting a new transport option
+TRANS_OPT_NO_DEPENDENTS to indicate that only the objects themselves are
+desired, not any object that they refer to. Because some transports
+invoke fetch_pack() in the same process, fetch_pack() has been updated
+to not use any object flags when the corresponding argument
+(no_dependents) is set.
+
+The local repository sends a request with the hashes of all requested
+objects as "want" lines, and does not perform any packfile negotiation.
+It then receives a packfile.
+
+Because we are reusing the existing fetch-pack mechanism, fetching
+currently fetches all objects referred to by the requested objects, even
+though they are not necessary.
+
 
 
 Current Limitations

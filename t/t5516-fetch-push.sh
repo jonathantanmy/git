@@ -197,7 +197,7 @@ grep_wrote () {
 	grep 'write_pack_file/wrote.*"value":"'$1'"' $2
 }
 
-test_expect_failure 'push with negotiation' '
+test_expect_success 'push with negotiation' '
 	# Without negotiation
 	mk_empty testrepo &&
 	git push testrepo $the_first_commit:refs/remotes/origin/first_commit &&

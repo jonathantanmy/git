@@ -41,7 +41,7 @@ test_expect_success 'push without negotiation (for comparing object counts with 
 	grep_wrote 6 event # 2 commits, 2 trees, 2 blobs
 '
 
-test_expect_failure 'push with negotiation' '
+test_expect_success 'push with negotiation' '
 	setup_client_and_server &&
 
 	GIT_TRACE2_EVENT="$(pwd)/event" git -C client -c protocol.version=2 -c push.negotiate=1 \

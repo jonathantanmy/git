@@ -27,6 +27,7 @@ setup_client_and_server () {
 	git init "$SERVER" &&
 	test_when_finished 'rm -rf "$SERVER"' &&
 	test_config -C "$SERVER" http.receivepack true &&
+	test_commit -C "$SERVER" unrelated_commit &&
 	git -C client push "$URI" first_commit:refs/remotes/origin/first_commit &&
 	git -C "$SERVER" config receive.hideRefs refs/remotes/origin/first_commit
 }
@@ -40,7 +41,7 @@ test_expect_success 'push without negotiation (for comparing object counts with 
 	grep_wrote 6 event # 2 commits, 2 trees, 2 blobs
 '
 
-test_expect_success 'push with negotiation' '
+test_expect_failure 'push with negotiation' '
 	setup_client_and_server &&
 
 	GIT_TRACE2_EVENT="$(pwd)/event" git -C client -c protocol.version=2 -c push.negotiate=1 \

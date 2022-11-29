@@ -256,6 +256,15 @@ static inline void *repo_read_object_file(struct repository *r,
 #define read_object_file(oid, type, size) repo_read_object_file(the_repository, oid, type, size)
 #endif
 
+/*
+ * Dies if real_oid is corrupt, not just missing.
+ *
+ * real_oid should be an oid that could not be read.
+ */
+void die_if_corrupt(struct repository *r,
+		    const struct object_id *oid,
+		    const struct object_id *real_oid);
+
 /* Read and unpack an object file into memory, write memory to an object file */
 int oid_object_info(struct repository *r, const struct object_id *, unsigned long *);
 

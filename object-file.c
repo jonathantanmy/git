@@ -1705,9 +1705,6 @@ void *read_object_file_extended(struct repository *r,
 				int lookup_replace)
 {
 	void *data;
-	const struct packed_git *p;
-	const char *path;
-	struct stat st;
 	const struct object_id *repl = lookup_replace ?
 		lookup_replace_object(r, oid) : oid;
 
@@ -1715,26 +1712,36 @@ void *read_object_file_extended(struct repository *r,
 	data = read_object(r, repl, type, size);
 	if (data)
 		return data;
+	die_if_corrupt(r, oid, repl);
+
+	return NULL;
+}
+
+void die_if_corrupt(struct repository *r,
+		    const struct object_id *oid,
+		    const struct object_id *real_oid)
+{
+	const struct packed_git *p;
+	const char *path;
+	struct stat st;
 
 	obj_read_lock();
 	if (errno && errno != ENOENT)
 		die_errno(_("failed to read object %s"), oid_to_hex(oid));
 
 	/* die if we replaced an object with one that does not exist */
-	if (repl != oid)
+	if (!oideq(real_oid, oid))
 		die(_("replacement %s not found for %s"),
-		    oid_to_hex(repl), oid_to_hex(oid));
+		    oid_to_hex(real_oid), oid_to_hex(oid));
 
-	if (!stat_loose_object(r, repl, &st, &path))
+	if (!stat_loose_object(r, real_oid, &st, &path))
 		die(_("loose object %s (stored in %s) is corrupt"),
-		    oid_to_hex(repl), path);
+		    oid_to_hex(real_oid), path);
 
-	if ((p = has_packed_and_bad(r, repl)))
+	if ((p = has_packed_and_bad(r, real_oid)))
 		die(_("packed object %s (stored in %s) is corrupt"),
-		    oid_to_hex(repl), p->pack_name);
+		    oid_to_hex(real_oid), p->pack_name);
 	obj_read_unlock();
-
-	return NULL;
 }
 
 void *read_object_with_reference(struct repository *r,

@@ -1546,6 +1546,11 @@ static int do_oid_object_info_extended(struct repository *r,
 
 	if (flags & OBJECT_INFO_LOOKUP_REPLACE)
 		real = lookup_replace_object(r, oid);
+	if (oi && oi->real_oidp) {
+		if (!(flags & OBJECT_INFO_LOOKUP_REPLACE))
+			BUG("specifying real_oidp does not make sense without OBJECT_INFO_LOOKUP_REPLACE");
+		*oi->real_oidp = real;
+	}
 
 	if (is_null_oid(real))
 		return -1;
@@ -1659,17 +1664,27 @@ int oid_object_info(struct repository *r,
 	return type;
 }
 
+/*
+ * If real_oid is not NULL, check if oid has a replace object and store the
+ * object that we end up using there.
+ */
 static void *read_object(struct repository *r,
 			 const struct object_id *oid, enum object_type *type,
-			 unsigned long *size)
+			 unsigned long *size, const struct object_id **real_oid)
 {
 	struct object_info oi = OBJECT_INFO_INIT;
 	void *content;
+	unsigned int flags = 0;
 	oi.typep = type;
 	oi.sizep = size;
 	oi.contentp = &content;
 
-	if (oid_object_info_extended(r, oid, &oi, 0) < 0)
+	if (real_oid) {
+		flags |= OBJECT_INFO_LOOKUP_REPLACE;
+		oi.real_oidp = real_oid;
+	}
+
+	if (oid_object_info_extended(r, oid, &oi, flags) < 0)
 		return NULL;
 	return content;
 }
@@ -1705,14 +1720,13 @@ void *read_object_file_extended(struct repository *r,
 				int lookup_replace)
 {
 	void *data;
-	const struct object_id *repl = lookup_replace ?
-		lookup_replace_object(r, oid) : oid;
+	const struct object_id *real_oid;
 
 	errno = 0;
-	data = read_object(r, repl, type, size);
+	data = read_object(r, oid, type, size, &real_oid);
 	if (data)
 		return data;
-	die_if_corrupt(r, oid, repl);
+	die_if_corrupt(r, oid, real_oid);
 
 	return NULL;
 }
@@ -2283,7 +2297,7 @@ int force_object_loose(const struct object_id *oid, time_t mtime)
 
 	if (has_loose_object(oid))
 		return 0;
-	buf = read_object(the_repository, oid, &type, &len);
+	buf = read_object(the_repository, oid, &type, &len, NULL);
 	if (!buf)
 		return error(_("cannot read object for %s"), oid_to_hex(oid));
 	hdrlen = format_object_header(hdr, sizeof(hdr), type, len);

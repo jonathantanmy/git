@@ -508,6 +508,13 @@ int repo_parse_commit_internal(struct repository *r,
 	enum object_type type;
 	void *buffer;
 	unsigned long size;
+	const struct object_id *real_oid;
+	struct object_info oi = {
+		.typep = &type,
+		.sizep = &size,
+		.contentp = &buffer,
+		.real_oidp = &real_oid,
+	};
 	int ret;
 
 	if (!item)
@@ -516,11 +523,18 @@ int repo_parse_commit_internal(struct repository *r,
 		return 0;
 	if (use_commit_graph && parse_commit_in_graph(r, item))
 		return 0;
-	buffer = repo_read_object_file(r, &item->object.oid, &type, &size);
-	if (!buffer)
+
+	/*
+	 * Git does not support partial clones that exclude commits, so set
+	 * OBJECT_INFO_SKIP_FETCH_OBJECT to fail fast when an object is missing.
+	 */
+	if (oid_object_info_extended(r, &item->object.oid, &oi,
+	    OBJECT_INFO_LOOKUP_REPLACE | OBJECT_INFO_SKIP_FETCH_OBJECT) < 0) {
+		die_if_corrupt(r, &item->object.oid, real_oid);
 		return quiet_on_missing ? -1 :
 			error("Could not read %s",
 			     oid_to_hex(&item->object.oid));
+	}
 	if (type != OBJ_COMMIT) {
 		free(buffer);
 		return error("Object %s not a commit",

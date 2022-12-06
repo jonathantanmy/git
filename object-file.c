@@ -1215,7 +1215,8 @@ static int quick_has_loose(struct repository *r,
  * searching for a loose object named "oid".
  */
 static void *map_loose_object_1(struct repository *r, const char *path,
-			     const struct object_id *oid, unsigned long *size)
+				const struct object_id *oid, unsigned long *size,
+				char **mapped_path)
 {
 	void *map;
 	int fd;
@@ -1224,6 +1225,9 @@ static void *map_loose_object_1(struct repository *r, const char *path,
 		fd = git_open(path);
 	else
 		fd = open_loose_object(r, oid, &path);
+	if (mapped_path)
+		*mapped_path = xstrdup(path);
+
 	map = NULL;
 	if (fd >= 0) {
 		struct stat st;
@@ -1247,7 +1251,7 @@ void *map_loose_object(struct repository *r,
 		       const struct object_id *oid,
 		       unsigned long *size)
 {
-	return map_loose_object_1(r, NULL, oid, size);
+	return map_loose_object_1(r, NULL, oid, size, NULL);
 }
 
 enum unpack_loose_header_result unpack_loose_header(git_zstream *stream,
@@ -1428,6 +1432,7 @@ static int loose_object_info(struct repository *r,
 {
 	int status = 0;
 	unsigned long mapsize;
+	char *mapped_path = NULL;
 	void *map;
 	git_zstream stream;
 	char hdr[MAX_HEADER_LEN];
@@ -1459,9 +1464,11 @@ static int loose_object_info(struct repository *r,
 		return 0;
 	}
 
-	map = map_loose_object(r, oid, &mapsize);
-	if (!map)
+	map = map_loose_object_1(r, NULL, oid, &mapsize, &mapped_path);
+	if (!map) {
+		free(mapped_path);
 		return -1;
+	}
 
 	if (!oi->sizep)
 		oi->sizep = &size_scratch;
@@ -1497,8 +1504,13 @@ static int loose_object_info(struct repository *r,
 		break;
 	}
 
+	if (status && (flags & OBJECT_INFO_DIE_IF_CORRUPT))
+		die(_("loose object %s (stored in %s) is corrupt"),
+		    oid_to_hex(oid), mapped_path);
+
 	git_inflate_end(&stream);
 cleanup:
+	free(mapped_path);
 	munmap(map, mapsize);
 	if (oi->sizep == &size_scratch)
 		oi->sizep = NULL;
@@ -1608,6 +1620,15 @@ static int do_oid_object_info_extended(struct repository *r,
 			continue;
 		}
 
+		if (flags & OBJECT_INFO_DIE_IF_CORRUPT) {
+			const struct packed_git *p;
+			if ((flags & OBJECT_INFO_LOOKUP_REPLACE) && !oideq(real, oid))
+				die(_("replacement %s not found for %s"),
+				    oid_to_hex(real), oid_to_hex(oid));
+			if ((p = has_packed_and_bad(r, real)))
+				die(_("packed object %s (stored in %s) is corrupt"),
+				    oid_to_hex(real), p->pack_name);
+		}
 		return -1;
 	}
 
@@ -1660,7 +1681,8 @@ int oid_object_info(struct repository *r,
 
 static void *read_object(struct repository *r,
 			 const struct object_id *oid, enum object_type *type,
-			 unsigned long *size)
+			 unsigned long *size,
+			 int die_if_corrupt)
 {
 	struct object_info oi = OBJECT_INFO_INIT;
 	void *content;
@@ -1668,7 +1690,9 @@ static void *read_object(struct repository *r,
 	oi.sizep = size;
 	oi.contentp = &content;
 
-	if (oid_object_info_extended(r, oid, &oi, 0) < 0)
+	if (oid_object_info_extended(r, oid, &oi,
+				     die_if_corrupt ? OBJECT_INFO_DIE_IF_CORRUPT : 0)
+	    < 0)
 		return NULL;
 	return content;
 }
@@ -1704,34 +1728,13 @@ void *read_object_file_extended(struct repository *r,
 				int lookup_replace)
 {
 	void *data;
-	const struct packed_git *p;
-	const char *path;
-	struct stat st;
 	const struct object_id *repl = lookup_replace ?
 		lookup_replace_object(r, oid) : oid;
 
 	errno = 0;
-	data = read_object(r, repl, type, size);
+	data = read_object(r, repl, type, size, 1);
 	if (data)
 		return data;
-
-	obj_read_lock();
-	if (errno && errno != ENOENT)
-		die_errno(_("failed to read object %s"), oid_to_hex(oid));
-
-	/* die if we replaced an object with one that does not exist */
-	if (repl != oid)
-		die(_("replacement %s not found for %s"),
-		    oid_to_hex(repl), oid_to_hex(oid));
-
-	if (!stat_loose_object(r, repl, &st, &path))
-		die(_("loose object %s (stored in %s) is corrupt"),
-		    oid_to_hex(repl), path);
-
-	if ((p = has_packed_and_bad(r, repl)))
-		die(_("packed object %s (stored in %s) is corrupt"),
-		    oid_to_hex(repl), p->pack_name);
-	obj_read_unlock();
 
 	return NULL;
 }
@@ -2275,7 +2278,7 @@ int force_object_loose(const struct object_id *oid, time_t mtime)
 
 	if (has_loose_object(oid))
 		return 0;
-	buf = read_object(the_repository, oid, &type, &len);
+	buf = read_object(the_repository, oid, &type, &len, 0);
 	if (!buf)
 		return error(_("cannot read object for %s"), oid_to_hex(oid));
 	hdrlen = format_object_header(hdr, sizeof(hdr), type, len);
@@ -2797,7 +2800,7 @@ int read_loose_object(const char *path,
 	char hdr[MAX_HEADER_LEN];
 	unsigned long *size = oi->sizep;
 
-	map = map_loose_object_1(the_repository, path, NULL, &mapsize);
+	map = map_loose_object_1(the_repository, path, NULL, &mapsize, NULL);
 	if (!map) {
 		error_errno(_("unable to mmap %s"), path);
 		goto out;

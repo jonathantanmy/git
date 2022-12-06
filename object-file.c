@@ -1575,18 +1575,17 @@ static int do_oid_object_info_extended(struct repository *r,
 		if (find_pack_entry(r, real, &e))
 			break;
 
-		if (flags & OBJECT_INFO_IGNORE_LOOSE)
-			return -1;
+		if (!(flags & OBJECT_INFO_IGNORE_LOOSE)) {
+			/* Most likely it's a loose object. */
+			if (!loose_object_info(r, real, oi, flags))
+				return 0;
 
-		/* Most likely it's a loose object. */
-		if (!loose_object_info(r, real, oi, flags))
-			return 0;
-
-		/* Not a loose object; someone else may have just packed it. */
-		if (!(flags & OBJECT_INFO_QUICK)) {
-			reprepare_packed_git(r);
-			if (find_pack_entry(r, real, &e))
-				break;
+			/* Not a loose object; someone else may have just packed it. */
+			if (!(flags & OBJECT_INFO_QUICK)) {
+				reprepare_packed_git(r);
+				if (find_pack_entry(r, real, &e))
+					break;
+			}
 		}
 
 		/*

@@ -734,6 +734,39 @@ test_expect_success 'colors can be overridden' '
 	test_cmp expect actual
 '
 
+test_expect_success 'colors can be skipped with color.ui=false' '
+	git reset --hard &&
+	test_when_finished "git rm -f color-test" &&
+	test_write_lines context old more-context >color-test &&
+	git add color-test &&
+	test_write_lines context new more-context another-one >color-test &&
+
+	test_write_lines help quit >input &&
+	force_color git \
+		-c color.ui=false \
+		add -i >actual.raw <input &&
+	test_decode_color <actual.raw >actual &&
+	cat >expect <<-\EOF &&
+	           staged     unstaged path
+	  1:        +3/-0        +2/-1 color-test
+
+	*** Commands ***
+	  1: [s]tatus	  2: [u]pdate	  3: [r]evert	  4: [a]dd untracked
+	  5: [p]atch	  6: [d]iff	  7: [q]uit	  8: [h]elp
+	What now> status        - show paths with changes
+	update        - add working tree state to the staged set of changes
+	revert        - revert staged set of changes back to the HEAD version
+	patch         - pick hunks and update selectively
+	diff          - view diff between HEAD and index
+	add untracked - add contents of untracked files to the staged set of changes
+	*** Commands ***
+	  1: [s]tatus	  2: [u]pdate	  3: [r]evert	  4: [a]dd untracked
+	  5: [p]atch	  6: [d]iff	  7: [q]uit	  8: [h]elp
+	What now> Bye.
+	EOF
+	test_cmp expect actual
+'
+
 test_expect_success 'colorized diffs respect diff.wsErrorHighlight' '
 	git reset --hard &&
 

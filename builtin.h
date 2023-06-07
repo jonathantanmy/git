@@ -2,9 +2,6 @@
 #define BUILTIN_H
 
 #include "git-compat-util.h"
-#include "strbuf.h"
-#include "cache.h"
-#include "commit.h"
 
 /*
  * builtin API
@@ -107,6 +104,16 @@ void setup_auto_pager(const char *cmd, int def);
 
 int is_builtin(const char *s);
 
+/*
+ * Builtins which do not use RUN_SETUP should never see
+ * a prefix that is not empty; use this to protect downstream
+ * code which is not prepared to call prefix_filename(), etc.
+ */
+#define BUG_ON_NON_EMPTY_PREFIX(prefix) do { \
+	if ((prefix)) \
+		BUG("unexpected prefix in builtin: %s", (prefix)); \
+} while (0)
+
 int cmd_add(int argc, const char **argv, const char *prefix);
 int cmd_am(int argc, const char **argv, const char *prefix);
 int cmd_annotate(int argc, const char **argv, const char *prefix);
@@ -204,6 +211,7 @@ int cmd_remote(int argc, const char **argv, const char *prefix);
 int cmd_remote_ext(int argc, const char **argv, const char *prefix);
 int cmd_remote_fd(int argc, const char **argv, const char *prefix);
 int cmd_repack(int argc, const char **argv, const char *prefix);
+int cmd_replay(int argc, const char **argv, const char *prefix);
 int cmd_rerere(int argc, const char **argv, const char *prefix);
 int cmd_reset(int argc, const char **argv, const char *prefix);
 int cmd_restore(int argc, const char **argv, const char *prefix);

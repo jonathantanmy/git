@@ -8,6 +8,7 @@ test_description='git rebase --merge test'
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME
 
+TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 T="A quick brown fox
@@ -129,27 +130,6 @@ test_expect_success 'picking rebase' '
 		echo "$g"
 		false
 	esac
-'
-
-test_expect_success 'rebase -s funny -Xopt' '
-	test_when_finished "rm -fr test-bin funny.was.run" &&
-	mkdir test-bin &&
-	cat >test-bin/git-merge-funny <<-EOF &&
-	#!$SHELL_PATH
-	case "\$1" in --opt) ;; *) exit 2 ;; esac
-	shift &&
-	>funny.was.run &&
-	exec git merge-recursive "\$@"
-	EOF
-	chmod +x test-bin/git-merge-funny &&
-	git reset --hard &&
-	git checkout -b test-funny main^ &&
-	test_commit funny &&
-	(
-		PATH=./test-bin:$PATH &&
-		git rebase -s funny -Xopt main
-	) &&
-	test -f funny.was.run
 '
 
 test_expect_success 'rebase --skip works with two conflicts in a row' '

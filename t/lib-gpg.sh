@@ -51,6 +51,27 @@ test_lazy_prereq GPG '
 	esac
 '
 
+test_lazy_prereq GPG2 '
+	gpg_version=$(gpg --version 2>&1)
+	test $? != 127 || exit 1
+
+	case "$gpg_version" in
+	"gpg (GnuPG) "[01].*)
+		say "This test requires a GPG version >= v2.0.0"
+		exit 1
+		;;
+	*)
+		(gpgconf --kill all || : ) &&
+		gpg --homedir "${GNUPGHOME}" --import \
+			"$TEST_DIRECTORY"/lib-gpg/keyring.gpg &&
+		gpg --homedir "${GNUPGHOME}" --import-ownertrust \
+			"$TEST_DIRECTORY"/lib-gpg/ownertrust &&
+		gpg --homedir "${GNUPGHOME}" </dev/null >/dev/null \
+			--sign -u committer@example.com
+		;;
+	esac
+'
+
 test_lazy_prereq GPGSM '
 	test_have_prereq GPG &&
 	# Available key info:
@@ -136,7 +157,7 @@ test_lazy_prereq GPGSSH '
 
 test_lazy_prereq GPGSSH_VERIFYTIME '
 	# Check if ssh-keygen has a verify-time option by passing an invalid date to it
-	ssh-keygen -Overify-time=INVALID -Y check-novalidate -s doesnotmatter 2>&1 | grep -q -F "Invalid \"verify-time\"" &&
+	ssh-keygen -Overify-time=INVALID -Y check-novalidate -n "git" -s doesnotmatter 2>&1 | grep -q -F "Invalid \"verify-time\"" &&
 
 	# Set up keys with key lifetimes
 	ssh-keygen -t ed25519 -N "" -C "timeboxed valid key" -f "${GPGSSH_KEY_TIMEBOXEDVALID}" >/dev/null &&

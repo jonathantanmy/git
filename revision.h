@@ -2,13 +2,15 @@
 #define REVISION_H
 
 #include "commit.h"
-#include "parse-options.h"
 #include "grep.h"
 #include "notes.h"
 #include "pretty.h"
 #include "diff.h"
 #include "commit-slab-decl.h"
+#include "decorate.h"
+#include "ident.h"
 #include "list-objects-filter-options.h"
+#include "strvec.h"
 
 /**
  * The revision walking API offers functions to build a list of revisions
@@ -61,6 +63,8 @@ struct string_list;
 struct saved_parents;
 struct bloom_key;
 struct bloom_filter_settings;
+struct option;
+struct parse_opt_ctx_t;
 define_shared_commit_slab(revision_sources, char *);
 
 struct rev_cmdline_info {
@@ -84,7 +88,7 @@ struct rev_cmdline_info {
 struct ref_exclusions {
 	/*
 	 * Excluded refs is a list of wildmatch patterns. If any of the
-	 * patterns matches, the reference will be excluded.
+	 * patterns match, the reference will be excluded.
 	 */
 	struct string_list excluded_refs;
 
@@ -92,7 +96,7 @@ struct ref_exclusions {
 	 * Hidden refs is a list of patterns that is to be hidden via
 	 * `ref_is_hidden()`.
 	 */
-	struct string_list hidden_refs;
+	struct strvec hidden_refs;
 
 	/*
 	 * Indicates whether hidden refs have been configured. This is to
@@ -107,7 +111,7 @@ struct ref_exclusions {
  */
 #define REF_EXCLUSIONS_INIT { \
 	.excluded_refs = STRING_LIST_INIT_DUP, \
-	.hidden_refs = STRING_LIST_INIT_DUP, \
+	.hidden_refs = STRVEC_INIT, \
 }
 
 struct oidset;
@@ -415,9 +419,6 @@ struct rev_info {
 void repo_init_revisions(struct repository *r,
 			 struct rev_info *revs,
 			 const char *prefix);
-#ifndef NO_THE_REPOSITORY_COMPATIBILITY_MACROS
-#define init_revisions(revs, prefix) repo_init_revisions(the_repository, revs, prefix)
-#endif
 
 /**
  * Parse revision information, filling in the `rev_info` structure, and

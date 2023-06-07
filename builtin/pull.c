@@ -6,15 +6,21 @@
  * Fetch one or more remote refs and merge it/them into the current HEAD.
  */
 #define USE_THE_INDEX_VARIABLE
-#include "cache.h"
-#include "config.h"
 #include "builtin.h"
+#include "advice.h"
+#include "config.h"
+#include "gettext.h"
+#include "hex.h"
+#include "merge.h"
+#include "object-name.h"
 #include "parse-options.h"
 #include "exec-cmd.h"
 #include "run-command.h"
 #include "oid-array.h"
 #include "remote.h"
 #include "dir.h"
+#include "path.h"
+#include "read-cache-ll.h"
 #include "rebase.h"
 #include "refs.h"
 #include "refspec.h"
@@ -359,8 +365,6 @@ static enum rebase_type config_get_rebase(int *rebase_unspecified)
  */
 static int git_pull_config(const char *var, const char *value, void *cb)
 {
-	int status;
-
 	if (!strcmp(var, "rebase.autostash")) {
 		config_autostash = git_config_bool(var, value);
 		return 0;
@@ -371,10 +375,6 @@ static int git_pull_config(const char *var, const char *value, void *cb)
 	} else if (!strcmp(var, "gpg.mintrustlevel")) {
 		check_trust_level = 0;
 	}
-
-	status = git_gpg_config(var, value, cb);
-	if (status)
-		return status;
 
 	return git_default_config(var, value, cb);
 }
@@ -967,13 +967,13 @@ static void show_advice_pull_non_ff(void)
 		 "your next pull:\n"
 		 "\n"
 		 "  git config pull.rebase false  # merge\n"
-		 "  git config pull.rebase true   # rebase\n"
+		 "  git config pull.rebase merges # rebase\n"
 		 "  git config pull.ff only       # fast-forward only\n"
 		 "\n"
 		 "You can replace \"git config\" with \"git config --global\" to set a default\n"
-		 "preference for all repositories. You can also pass --rebase, --no-rebase,\n"
-		 "or --ff-only on the command line to override the configured default per\n"
-		 "invocation.\n"));
+		 "preference for all repositories. You can also pass --rebase=merges,\n"
+		 "--no-rebase, or --ff-only on the command line to override the configured\n"
+		 "default per invocation.\n"));
 }
 
 int cmd_pull(int argc, const char **argv, const char *prefix)
@@ -1036,7 +1036,7 @@ int cmd_pull(int argc, const char **argv, const char *prefix)
 	if (file_exists(git_path_merge_head(the_repository)))
 		die_conclude_merge();
 
-	if (get_oid("HEAD", &orig_head))
+	if (repo_get_oid(the_repository, "HEAD", &orig_head))
 		oidclr(&orig_head);
 
 	if (opt_rebase) {
@@ -1049,7 +1049,7 @@ int cmd_pull(int argc, const char **argv, const char *prefix)
 		if (!opt_autostash)
 			require_clean_work_tree(the_repository,
 				N_("pull with rebase"),
-				_("please commit or stash them."), 1, 0);
+				_("Please commit or stash them."), 1, 0);
 
 		if (get_rebase_fork_point(&rebase_fork_point, repo, *refspecs))
 			oidclr(&rebase_fork_point);
@@ -1061,7 +1061,7 @@ int cmd_pull(int argc, const char **argv, const char *prefix)
 	if (opt_dry_run)
 		return 0;
 
-	if (get_oid("HEAD", &curr_head))
+	if (repo_get_oid(the_repository, "HEAD", &curr_head))
 		oidclr(&curr_head);
 
 	if (!is_null_oid(&orig_head) && !is_null_oid(&curr_head) &&

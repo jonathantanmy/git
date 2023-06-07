@@ -409,6 +409,25 @@ typedef int (*start_failure_fn)(struct strbuf *out,
 				void *pp_task_cb);
 
 /**
+ * This callback is called whenever output from a child process is buffered
+ *
+ * See run_processes_parallel() below for a discussion of the "struct
+ * strbuf *out" parameter.
+ *
+ * The offset refers to the number of bytes originally in "out" before
+ * the output from the child process was buffered. Therefore, the buffer
+ * range, "out + buf" to the end of "out", would contain the buffer of
+ * the child process output.
+ *
+ * pp_cb is the callback cookie as passed into run_processes_parallel,
+ * pp_task_cb is the callback cookie as passed into get_next_task_fn.
+ *
+ * This function is incompatible with "ungroup"
+ */
+typedef void (*on_stderr_output_fn)(struct strbuf *out, size_t offset,
+				    void *pp_cb, void *pp_task_cb);
+
+/**
  * This callback is called on every child process that finished processing.
  *
  * See run_processes_parallel() below for a discussion of the "struct
@@ -462,6 +481,12 @@ struct run_process_parallel_opts
 	start_failure_fn start_failure;
 
 	/**
+	 * on_stderr_output: See on_stderr_output_fn() above. Unless you need
+	 * to capture output from child processes, leave this as NULL.
+	 */
+	on_stderr_output_fn on_stderr_output;
+
+	/**
 	 * task_finished: See task_finished_fn() above. This can be
 	 * NULL to omit any special handling.
 	 */
@@ -503,7 +528,7 @@ void run_processes_parallel(const struct run_process_parallel_opts *opts);
  * exception of GIT_CONFIG_PARAMETERS and GIT_CONFIG_COUNT (which cause the
  * corresponding environment variables to be unset in the subprocess) and adds
  * an environment variable pointing to new_git_dir. See local_repo_env in
- * cache.h for more information.
+ * environment.h for more information.
  */
 void prepare_other_repo_env(struct strvec *env, const char *new_git_dir);
 
@@ -563,5 +588,7 @@ enum start_bg_result start_bg_command(struct child_process *cmd,
 				      start_bg_wait_cb *wait_cb,
 				      void *cb_data,
 				      unsigned int timeout_sec);
+
+int sane_execvp(const char *file, char *const argv[]);
 
 #endif

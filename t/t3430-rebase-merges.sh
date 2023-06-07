@@ -128,14 +128,24 @@ test_expect_success 'generate correct todo list' '
 '
 
 test_expect_success '`reset` refuses to overwrite untracked files' '
-	git checkout -b refuse-to-reset &&
+	git checkout B &&
 	test_commit dont-overwrite-untracked &&
-	git checkout @{-1} &&
-	: >dont-overwrite-untracked.t &&
-	echo "reset refs/tags/dont-overwrite-untracked" >script-from-scratch &&
+	cat >script-from-scratch <<-EOF &&
+	exec >dont-overwrite-untracked.t
+	pick $(git rev-parse B) B
+	reset refs/tags/dont-overwrite-untracked
+	pick $(git rev-parse C) C
+	exec cat .git/rebase-merge/done >actual
+	EOF
 	test_config sequence.editor \""$PWD"/replace-editor.sh\" &&
-	test_must_fail git rebase -ir HEAD &&
-	git rebase --abort
+	test_must_fail git rebase -ir A &&
+	test_cmp_rev HEAD B &&
+	head -n3 script-from-scratch >expect &&
+	test_cmp expect .git/rebase-merge/done &&
+	rm dont-overwrite-untracked.t &&
+	git rebase --continue &&
+	tail -n3 script-from-scratch >>expect &&
+	test_cmp expect actual
 '
 
 test_expect_success '`reset` rejects trees' '
@@ -167,14 +177,21 @@ test_expect_success 'failed `merge -C` writes patch (may be rescheduled, too)' '
 	test_must_fail git rebase -ir HEAD &&
 	grep "^merge -C .* G$" .git/rebase-merge/done &&
 	grep "^merge -C .* G$" .git/rebase-merge/git-rebase-todo &&
-	test_path_is_file .git/rebase-merge/patch &&
+	test_path_is_missing .git/rebase-merge/patch &&
+	test_path_is_missing .git/rebase-merge/author-script &&
+	test_path_is_missing .git/MERGE_MSG &&
+	test_path_is_missing .git/rebase-merge/message &&
+	test_path_is_missing .git/rebase-merge/stopped-sha &&
 
 	: fail because of merge conflict &&
-	rm G.t .git/rebase-merge/patch &&
 	git reset --hard conflicting-G &&
 	test_must_fail git rebase --continue &&
 	! grep "^merge -C .* G$" .git/rebase-merge/git-rebase-todo &&
-	test_path_is_file .git/rebase-merge/patch
+	test_path_is_file .git/rebase-merge/patch &&
+	test_path_is_file .git/rebase-merge/author-script &&
+	test_path_is_file .git/MERGE_MSG &&
+	test_path_is_file .git/rebase-merge/message &&
+	test_path_is_file .git/rebase-merge/stopped-sha
 '
 
 test_expect_success 'failed `merge <branch>` does not crash' '
@@ -250,6 +267,16 @@ test_expect_success 'with a branch tip that was cherry-picked already' '
 	EOF
 '
 
+test_expect_success '--no-rebase-merges countermands --rebase-merges' '
+	git checkout -b no-rebase-merges E &&
+	git rebase --rebase-merges --no-rebase-merges C &&
+	test_cmp_graph C.. <<-\EOF
+	* B
+	* D
+	o C
+	EOF
+'
+
 test_expect_success 'do not rebase cousins unless asked for' '
 	git checkout -b cousins main &&
 	before="$(git rev-parse --verify HEAD)" &&
@@ -266,6 +293,40 @@ test_expect_success 'do not rebase cousins unless asked for' '
 	|/
 	o H
 	EOF
+'
+
+test_expect_success 'rebase.rebaseMerges=rebase-cousins is equivalent to --rebase-merges=rebase-cousins' '
+	test_config rebase.rebaseMerges rebase-cousins &&
+	git checkout -b config-rebase-cousins main &&
+	git rebase HEAD^ &&
+	test_cmp_graph HEAD^.. <<-\EOF
+	*   Merge the topic branch '\''onebranch'\''
+	|\
+	| * D
+	| * G
+	|/
+	o H
+	EOF
+'
+
+test_expect_success '--no-rebase-merges overrides rebase.rebaseMerges=no-rebase-cousins' '
+	test_config rebase.rebaseMerges no-rebase-cousins &&
+	git checkout -b override-config-no-rebase-cousins E &&
+	git rebase --no-rebase-merges C &&
+	test_cmp_graph C.. <<-\EOF
+	* B
+	* D
+	o C
+	EOF
+'
+
+test_expect_success '--rebase-merges overrides rebase.rebaseMerges=rebase-cousins' '
+	test_config rebase.rebaseMerges rebase-cousins &&
+	git checkout -b override-config-rebase-cousins E &&
+	before="$(git rev-parse --verify HEAD)" &&
+	test_tick &&
+	git rebase --rebase-merges C &&
+	test_cmp_rev HEAD $before
 '
 
 test_expect_success 'refs/rewritten/* is worktree-local' '
@@ -532,6 +593,14 @@ test_expect_success '--rebase-merges with message matched with onto label' '
 	|/
 	* A
 	EOF
+'
+
+test_expect_success 'progress shows the correct total' '
+	git checkout -b progress H &&
+	git rebase --rebase-merges --force-rebase --verbose A 2> err &&
+	# Expecting "Rebasing (N/14)" here, no bogus total number
+	grep "^Rebasing.*/14.$" err >progress &&
+	test_line_count = 14 progress
 '
 
 test_done

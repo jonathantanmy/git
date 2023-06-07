@@ -1,6 +1,8 @@
-#include "cache.h"
+#include "git-compat-util.h"
 #include "config.h"
-#include "object-store.h"
+#include "hex.h"
+#include "object-store-ll.h"
+#include "strbuf.h"
 #include "xdiff-interface.h"
 #include "xdiff/xtypes.h"
 #include "xdiff/xdiffi.h"
@@ -183,7 +185,7 @@ void read_mmblob(mmfile_t *ptr, const struct object_id *oid)
 		return;
 	}
 
-	ptr->ptr = read_object_file(oid, &type, &size);
+	ptr->ptr = repo_read_object_file(the_repository, oid, &type, &size);
 	if (!ptr->ptr || type != OBJ_BLOB)
 		die("unable to read blob object %s", oid_to_hex(oid));
 	ptr->size = size;

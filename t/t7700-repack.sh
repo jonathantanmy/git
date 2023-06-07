@@ -106,6 +106,23 @@ test_expect_success SYMLINKS '--local keeps packs when alternate is objectdir ' 
 	test_cmp expect actual
 '
 
+test_expect_success '--local disables writing bitmaps when connected to alternate ODB' '
+	test_when_finished "rm -rf shared member" &&
+
+	git init shared &&
+	git clone --shared shared member &&
+	(
+		cd member &&
+		test_commit "object" &&
+		GIT_TEST_MULTI_PACK_INDEX=0 git repack -Adl --write-bitmap-index 2>err &&
+		cat >expect <<-EOF &&
+		warning: disabling bitmap writing, as some objects are not being packed
+		EOF
+		test_cmp expect err &&
+		test_path_is_missing .git/objects/pack-*.bitmap
+	)
+'
+
 test_expect_success 'packed obs in alt ODB are repacked even when local repo is packless' '
 	mkdir alt_objects/pack &&
 	mv .git/objects/pack/* alt_objects/pack &&
@@ -443,10 +460,10 @@ test_expect_success '--write-midx -b packs non-kept objects' '
 '
 
 test_expect_success '--write-midx removes stale pack-based bitmaps' '
-       rm -fr repo &&
-       git init repo &&
-       test_when_finished "rm -fr repo" &&
-       (
+	rm -fr repo &&
+	git init repo &&
+	test_when_finished "rm -fr repo" &&
+	(
 		cd repo &&
 		test_commit base &&
 		GIT_TEST_MULTI_PACK_INDEX=0 git repack -Ab &&
@@ -460,7 +477,7 @@ test_expect_success '--write-midx removes stale pack-based bitmaps' '
 		test_path_is_file $midx &&
 		test_path_is_file $midx-$(midx_checksum $objdir).bitmap &&
 		test_path_is_missing $pack_bitmap
-       )
+	)
 '
 
 test_expect_success '--write-midx with --pack-kept-objects' '

@@ -1,16 +1,22 @@
-#include "cache.h"
+#include "git-compat-util.h"
 #include "run-command.h"
+#include "environment.h"
 #include "exec-cmd.h"
+#include "gettext.h"
 #include "sigchain.h"
 #include "strvec.h"
+#include "symlinks.h"
 #include "thread-utils.h"
 #include "strbuf.h"
 #include "string-list.h"
+#include "trace.h"
+#include "trace2.h"
 #include "quote.h"
 #include "config.h"
 #include "packfile.h"
 #include "hook.h"
 #include "compat/nonblock.h"
+#include "alloc.h"
 
 void child_process_init(struct child_process *child)
 {
@@ -341,19 +347,19 @@ static void child_close_pair(int fd[2])
 	child_close(fd[1]);
 }
 
-static void child_error_fn(const char *err, va_list params)
+static void child_error_fn(const char *err UNUSED, va_list params UNUSED)
 {
 	const char msg[] = "error() should not be called in child\n";
 	xwrite(2, msg, sizeof(msg) - 1);
 }
 
-static void child_warn_fn(const char *err, va_list params)
+static void child_warn_fn(const char *err UNUSED, va_list params UNUSED)
 {
 	const char msg[] = "warn() should not be called in child\n";
 	xwrite(2, msg, sizeof(msg) - 1);
 }
 
-static void NORETURN child_die_fn(const char *err, va_list params)
+static void NORETURN child_die_fn(const char *err UNUSED, va_list params UNUSED)
 {
 	const char msg[] = "die() should not be called in child\n";
 	xwrite(2, msg, sizeof(msg) - 1);
@@ -1526,6 +1532,11 @@ static void pp_init(struct parallel_processes *pp,
 	if (!opts->get_next_task)
 		BUG("you need to specify a get_next_task function");
 
+	if (opts->ungroup) {
+		if (opts->on_stderr_output)
+			BUG("on_stderr_output and ungroup are incompatible with each other");
+	}
+
 	CALLOC_ARRAY(pp->children, n);
 	if (!opts->ungroup)
 		CALLOC_ARRAY(pp->pfd, n);
@@ -1650,14 +1661,19 @@ static void pp_buffer_stderr(struct parallel_processes *pp,
 	for (size_t i = 0; i < opts->processes; i++) {
 		if (pp->children[i].state == GIT_CP_WORKING &&
 		    pp->pfd[i].revents & (POLLIN | POLLHUP)) {
-			int n = strbuf_read_once(&pp->children[i].err,
-						 pp->children[i].process.err, 0);
+			ssize_t n = strbuf_read_once(&pp->children[i].err,
+						     pp->children[i].process.err, 0);
 			if (n == 0) {
 				close(pp->children[i].process.err);
 				pp->children[i].state = GIT_CP_WAIT_CLEANUP;
-			} else if (n < 0)
+			} else if (n < 0) {
 				if (errno != EAGAIN)
 					die_errno("read");
+			} else if (opts->on_stderr_output) {
+				opts->on_stderr_output(&pp->children[i].err,
+					pp->children[i].err.len - n,
+					opts->data, pp->children[i].data);
+			}
 		}
 	}
 }

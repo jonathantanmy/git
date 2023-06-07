@@ -1,9 +1,13 @@
 #include "builtin.h"
 #include "config.h"
+#include "gettext.h"
+#include "repository.h"
 #include "revision.h"
 #include "reachable.h"
+#include "wildmatch.h"
 #include "worktree.h"
 #include "reflog.h"
+#include "parse-options.h"
 
 #define BUILTIN_REFLOG_SHOW_USAGE \
 	N_("git reflog [show] [<log-options>] [<ref>]")

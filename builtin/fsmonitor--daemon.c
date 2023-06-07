@@ -1,15 +1,22 @@
 #include "builtin.h"
+#include "abspath.h"
+#include "alloc.h"
 #include "config.h"
+#include "environment.h"
+#include "gettext.h"
 #include "parse-options.h"
-#include "fsmonitor.h"
+#include "fsmonitor-ll.h"
 #include "fsmonitor-ipc.h"
 #include "fsmonitor-path-utils.h"
+#include "fsmonitor-settings.h"
 #include "compat/fsmonitor/fsm-health.h"
 #include "compat/fsmonitor/fsm-listen.h"
 #include "fsmonitor--daemon.h"
 #include "simple-ipc.h"
 #include "khash.h"
 #include "pkt-line.h"
+#include "trace.h"
+#include "trace2.h"
 
 static const char * const builtin_fsmonitor__daemon_usage[] = {
 	N_("git fsmonitor--daemon start [<options>]"),
@@ -1574,7 +1581,7 @@ int cmd_fsmonitor__daemon(int argc, const char **argv, const char *prefix)
 }
 
 #else
-int cmd_fsmonitor__daemon(int argc, const char **argv, const char *prefix)
+int cmd_fsmonitor__daemon(int argc, const char **argv, const char *prefix UNUSED)
 {
 	struct option options[] = {
 		OPT_END()

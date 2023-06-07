@@ -1,10 +1,13 @@
-#include "cache.h"
+#include "builtin.h"
 #include "config.h"
 #include "diff.h"
 #include "diff-merges.h"
 #include "commit.h"
+#include "preload-index.h"
+#include "repository.h"
 #include "revision.h"
-#include "builtin.h"
+#include "setup.h"
+#include "sparse-index.h"
 #include "submodule.h"
 
 static const char diff_cache_usage[] =
@@ -24,6 +27,14 @@ int cmd_diff_index(int argc, const char **argv, const char *prefix)
 		usage(diff_cache_usage);
 
 	git_config(git_diff_basic_config, NULL); /* no "diff" UI options */
+
+	prepare_repo_settings(the_repository);
+	the_repository->settings.command_requires_full_index = 0;
+
+	if (pathspec_needs_expanded_index(the_repository->index,
+					  &rev.diffopt.pathspec))
+		ensure_full_index(the_repository->index);
+
 	repo_init_revisions(the_repository, &rev, prefix);
 	rev.abbrev = 0;
 	prefix = precompose_argv_prefix(argc, argv, prefix);
@@ -69,6 +80,7 @@ int cmd_diff_index(int argc, const char **argv, const char *prefix)
 		perror("repo_read_index");
 		return -1;
 	}
+
 	result = run_diff_index(&rev, option);
 	result = diff_result_code(&rev.diffopt, result);
 	release_revisions(&rev);

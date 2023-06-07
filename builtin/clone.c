@@ -10,13 +10,20 @@
 
 #define USE_THE_INDEX_VARIABLE
 #include "builtin.h"
+#include "abspath.h"
+#include "advice.h"
 #include "config.h"
+#include "copy.h"
+#include "environment.h"
+#include "gettext.h"
+#include "hex.h"
 #include "lockfile.h"
 #include "parse-options.h"
 #include "fetch-pack.h"
 #include "refs.h"
 #include "refspec.h"
-#include "object-store.h"
+#include "object-file.h"
+#include "object-store-ll.h"
 #include "tree.h"
 #include "tree-walk.h"
 #include "unpack-trees.h"
@@ -29,12 +36,16 @@
 #include "branch.h"
 #include "remote.h"
 #include "run-command.h"
+#include "setup.h"
 #include "connected.h"
 #include "packfile.h"
+#include "path.h"
+#include "pkt-line.h"
 #include "list-objects-filter-options.h"
 #include "hook.h"
 #include "bundle.h"
 #include "bundle-uri.h"
+#include "wrapper.h"
 
 /*
  * Overall FIXMEs:
@@ -326,8 +337,18 @@ static void copy_or_link_directory(struct strbuf *src, struct strbuf *dest,
 
 	iter = dir_iterator_begin(src->buf, DIR_ITERATOR_PEDANTIC);
 
-	if (!iter)
+	if (!iter) {
+		if (errno == ENOTDIR) {
+			int saved_errno = errno;
+			struct stat st;
+
+			if (!lstat(src->buf, &st) && S_ISLNK(st.st_mode))
+				die(_("'%s' is a symlink, refusing to clone with --local"),
+				    src->buf);
+			errno = saved_errno;
+		}
 		die_errno(_("failed to start iterator over '%s'"), src->buf);
+	}
 
 	strbuf_addch(src, '/');
 	src_len = src->len;
@@ -547,9 +568,9 @@ static void write_followtags(const struct ref *refs, const char *msg)
 			continue;
 		if (ends_with(ref->name, "^{}"))
 			continue;
-		if (!has_object_file_with_flags(&ref->old_oid,
-						OBJECT_INFO_QUICK |
-						OBJECT_INFO_SKIP_FETCH_OBJECT))
+		if (!repo_has_object_file_with_flags(the_repository, &ref->old_oid,
+						     OBJECT_INFO_QUICK |
+						     OBJECT_INFO_SKIP_FETCH_OBJECT))
 			continue;
 		update_ref(msg, ref->name, &ref->old_oid, NULL, 0,
 			   UPDATE_REFS_DIE_ON_ERR);
@@ -909,6 +930,8 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 	int err = 0, complete_refs_before_fetch = 1;
 	int submodule_progress;
 	int filter_submodules = 0;
+	int hash_algo;
+	const int do_not_override_repo_unix_permissions = -1;
 
 	struct transport_ls_refs_options transport_ls_refs_options =
 		TRANSPORT_LS_REFS_OPTIONS_INIT;
@@ -1076,7 +1099,7 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 	}
 
 	init_db(git_dir, real_git_dir, option_template, GIT_HASH_UNKNOWN, NULL,
-		INIT_DB_QUIET);
+		do_not_override_repo_unix_permissions, INIT_DB_QUIET);
 
 	if (real_git_dir) {
 		free((char *)git_dir);
@@ -1297,15 +1320,15 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 		}
 	}
 
-	if (mapped_refs) {
-		int hash_algo = hash_algo_by_ptr(transport_get_hash_algo(transport));
-
 		/*
 		 * Now that we know what algorithm the remote side is using,
 		 * let's set ours to the same thing.
 		 */
-		initialize_repository_version(hash_algo, 1);
-		repo_set_hash_algo(the_repository, hash_algo);
+	hash_algo = hash_algo_by_ptr(transport_get_hash_algo(transport));
+	initialize_repository_version(hash_algo, 1);
+	repo_set_hash_algo(the_repository, hash_algo);
+
+	if (mapped_refs) {
 		/*
 		 * transport_get_remote_refs() may return refs with null sha-1
 		 * in mapped_refs (see struct transport->get_refs_list

@@ -1,12 +1,19 @@
-#include "cache.h"
+#include "git-compat-util.h"
+#include "alloc.h"
 #include "dir.h"
+#include "environment.h"
+#include "gettext.h"
+#include "hex.h"
+#include "path.h"
 #include "repository.h"
 #include "config.h"
 #include "submodule-config.h"
 #include "submodule.h"
 #include "strbuf.h"
-#include "object-store.h"
+#include "object-name.h"
+#include "object-store-ll.h"
 #include "parse-options.h"
+#include "thread-utils.h"
 #include "tree-walk.h"
 
 /*
@@ -334,26 +341,6 @@ int option_fetch_parse_recurse_submodules(const struct option *opt,
 	return 0;
 }
 
-static int parse_update_recurse(const char *opt, const char *arg,
-				int die_on_error)
-{
-	switch (git_parse_maybe_bool(arg)) {
-	case 1:
-		return RECURSE_SUBMODULES_ON;
-	case 0:
-		return RECURSE_SUBMODULES_OFF;
-	default:
-		if (die_on_error)
-			die("bad %s argument: %s", opt, arg);
-		return RECURSE_SUBMODULES_ERROR;
-	}
-}
-
-int parse_update_recurse_submodules_arg(const char *opt, const char *arg)
-{
-	return parse_update_recurse(opt, arg, 1);
-}
-
 static int parse_push_recurse(const char *opt, const char *arg,
 			       int die_on_error)
 {
@@ -535,7 +522,7 @@ static int gitmodule_oid_from_commit(const struct object_id *treeish_name,
 	}
 
 	strbuf_addf(rev, "%s:.gitmodules", oid_to_hex(treeish_name));
-	if (get_oid(rev->buf, gitmodules_oid) >= 0)
+	if (repo_get_oid(the_repository, rev->buf, gitmodules_oid) >= 0)
 		ret = 1;
 
 	return ret;
@@ -588,7 +575,8 @@ static const struct submodule *config_from(struct submodule_cache *cache,
 	if (submodule)
 		goto out;
 
-	config = read_object_file(&oid, &type, &config_size);
+	config = repo_read_object_file(the_repository, &oid, &type,
+				       &config_size);
 	if (!config || type != OBJ_BLOB)
 		goto out;
 
@@ -652,7 +640,6 @@ static void config_from_gitmodules(config_fn_t fn, struct repository *repo, void
 			config_source.file = file;
 		} else if (repo_get_oid(repo, GITMODULES_INDEX, &oid) >= 0 ||
 			   repo_get_oid(repo, GITMODULES_HEAD, &oid) >= 0) {
-			config_source.repo = repo;
 			config_source.blob = oidstr = xstrdup(oid_to_hex(&oid));
 			if (repo != the_repository)
 				add_submodule_odb_by_path(repo->objects->odb->path);
@@ -660,7 +647,7 @@ static void config_from_gitmodules(config_fn_t fn, struct repository *repo, void
 			goto out;
 		}
 
-		config_with_options(fn, data, &config_source, &opts);
+		config_with_options(fn, data, &config_source, repo, &opts);
 
 out:
 		free(oidstr);

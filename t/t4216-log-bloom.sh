@@ -420,50 +420,59 @@ get_first_changed_path_filter () {
 # chosen to be the same under all Unicode normalization forms
 CENT=$(printf "\xc2\xa2")
 
-test_expect_success 'set up repo with high bit path, version 1 changed-path' '
+# Some systems (in particular, Linux on the CI running on GitHub at the time of
+# writing) store into CENT a literal backslash, then "x", and so on (instead of
+# the high-bit characters needed). In these systems, do not run the following
+# tests.
+if test "$(printf $CENT | perl -0777 -ne 'no utf8; print ord($_)')" = "194"
+then
+	test_set_prereq HIGH_BIT
+fi
+
+test_expect_success HIGH_BIT 'set up repo with high bit path, version 1 changed-path' '
 	git init highbit1 &&
 	test_commit -C highbit1 c1 "$CENT" &&
 	git -C highbit1 commit-graph write --reachable --changed-paths
 '
 
-test_expect_success 'check value of version 1 changed-path' '
+test_expect_success HIGH_BIT 'check value of version 1 changed-path' '
 	(cd highbit1 &&
 		printf "52a9" >expect &&
 		get_first_changed_path_filter >actual &&
 		test_cmp expect actual)
 '
 
-test_expect_success 'version 1 changed-path used when version 1 requested' '
+test_expect_success HIGH_BIT 'version 1 changed-path used when version 1 requested' '
 	(cd highbit1 &&
 		test_bloom_filters_used "-- $CENT")
 '
 
-test_expect_success 'version 1 changed-path not used when version 2 requested' '
+test_expect_success HIGH_BIT 'version 1 changed-path not used when version 2 requested' '
 	(cd highbit1 &&
 		git config --add commitgraph.changedPathsVersion 2 &&
 		test_bloom_filters_not_used "-- $CENT")
 '
 
-test_expect_success 'set up repo with high bit path, version 2 changed-path' '
+test_expect_success HIGH_BIT 'set up repo with high bit path, version 2 changed-path' '
 	git init highbit2 &&
 	git -C highbit2 config --add commitgraph.changedPathsVersion 2 &&
 	test_commit -C highbit2 c2 "$CENT" &&
 	git -C highbit2 commit-graph write --reachable --changed-paths
 '
 
-test_expect_success 'check value of version 2 changed-path' '
+test_expect_success HIGH_BIT 'check value of version 2 changed-path' '
 	(cd highbit2 &&
 		printf "c01f" >expect &&
 		get_first_changed_path_filter >actual &&
 		test_cmp expect actual)
 '
 
-test_expect_success 'version 2 changed-path used when version 2 requested' '
+test_expect_success HIGH_BIT 'version 2 changed-path used when version 2 requested' '
 	(cd highbit2 &&
 		test_bloom_filters_used "-- $CENT")
 '
 
-test_expect_success 'version 2 changed-path not used when version 1 requested' '
+test_expect_success HIGH_BIT 'version 2 changed-path not used when version 1 requested' '
 	(cd highbit2 &&
 		git config --add commitgraph.changedPathsVersion 1 &&
 		test_bloom_filters_not_used "-- $CENT")

@@ -723,6 +723,7 @@ static void close_commit_graph_one(struct commit_graph *g)
 void close_commit_graph(struct raw_object_store *o)
 {
 	close_commit_graph_one(o->commit_graph);
+	deinit_bloom_filters();
 	o->commit_graph = NULL;
 }
 
@@ -2522,6 +2523,9 @@ int write_commit_graph(struct object_directory *odb,
 		compute_bloom_filters(ctx);
 
 	res = write_commit_graph_file(ctx);
+
+	if (ctx->changed_paths)
+		deinit_bloom_filters();
 
 	if (ctx->split)
 		mark_commit_graphs(ctx);

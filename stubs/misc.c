@@ -9,6 +9,7 @@
  * yet. To do that we need to start using dgettext() rather than
  * gettext() in our code.
  */
+#include "gettext.h"
 int git_gettext_enabled = 0;
 #endif
 

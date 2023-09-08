@@ -669,6 +669,8 @@ FUZZ_PROGRAMS =
 GIT_OBJS =
 LIB_OBJS =
 SCALAR_OBJS =
+STD_LIB_OBJS =
+STUB_LIB_OBJS =
 OBJECTS =
 OTHER_PROGRAMS =
 PROGRAM_OBJS =
@@ -917,6 +919,8 @@ TEST_SHELL_PATH = $(SHELL_PATH)
 
 LIB_FILE = libgit.a
 XDIFF_LIB = xdiff/lib.a
+STD_LIB_FILE = git-std-lib.a
+STUB_LIB_FILE = git-stub-lib.a
 REFTABLE_LIB = reftable/libreftable.a
 REFTABLE_TEST_LIB = reftable/libreftable_test.a
 
@@ -956,7 +960,6 @@ COCCI_SOURCES = $(filter-out $(THIRD_PARTY_SOURCES),$(FOUND_C_SOURCES))
 
 LIB_H = $(FOUND_H_SOURCES)
 
-LIB_OBJS += abspath.o
 LIB_OBJS += add-interactive.o
 LIB_OBJS += add-patch.o
 LIB_OBJS += advice.o
@@ -998,8 +1001,6 @@ LIB_OBJS += convert.o
 LIB_OBJS += copy.o
 LIB_OBJS += credential.o
 LIB_OBJS += csum-file.o
-LIB_OBJS += ctype.o
-LIB_OBJS += date.o
 LIB_OBJS += decorate.o
 LIB_OBJS += delta-islands.o
 LIB_OBJS += diagnose.o
@@ -1040,7 +1041,6 @@ LIB_OBJS += hash-lookup.o
 LIB_OBJS += hashmap.o
 LIB_OBJS += help.o
 LIB_OBJS += hex.o
-LIB_OBJS += hex-ll.o
 LIB_OBJS += hook.o
 LIB_OBJS += ident.o
 LIB_OBJS += json-writer.o
@@ -1091,7 +1091,6 @@ LIB_OBJS += pack-write.o
 LIB_OBJS += packfile.o
 LIB_OBJS += pager.o
 LIB_OBJS += parallel-checkout.o
-LIB_OBJS += parse.o
 LIB_OBJS += parse-options-cb.o
 LIB_OBJS += parse-options.o
 LIB_OBJS += patch-delta.o
@@ -1145,7 +1144,6 @@ LIB_OBJS += sparse-index.o
 LIB_OBJS += split-index.o
 LIB_OBJS += stable-qsort.o
 LIB_OBJS += statinfo.o
-LIB_OBJS += strbuf.o
 LIB_OBJS += streaming.o
 LIB_OBJS += string-list.o
 LIB_OBJS += strmap.o
@@ -1182,20 +1180,31 @@ LIB_OBJS += unpack-trees.o
 LIB_OBJS += upload-pack.o
 LIB_OBJS += url.o
 LIB_OBJS += urlmatch.o
-LIB_OBJS += usage.o
 LIB_OBJS += userdiff.o
-LIB_OBJS += utf8.o
 LIB_OBJS += varint.o
 LIB_OBJS += version.o
 LIB_OBJS += versioncmp.o
 LIB_OBJS += walker.o
 LIB_OBJS += wildmatch.o
 LIB_OBJS += worktree.o
-LIB_OBJS += wrapper.o
 LIB_OBJS += write-or-die.o
 LIB_OBJS += ws.o
 LIB_OBJS += wt-status.o
 LIB_OBJS += xdiff-interface.o
+
+STD_LIB_OBJS += abspath.o
+STD_LIB_OBJS += ctype.o
+STD_LIB_OBJS += date.o
+STD_LIB_OBJS += hex-ll.o
+STD_LIB_OBJS += parse.o
+STD_LIB_OBJS += strbuf.o
+STD_LIB_OBJS += usage.o
+STD_LIB_OBJS += utf8.o
+STD_LIB_OBJS += wrapper.o
+
+STUB_LIB_OBJS += stubs/trace2.o
+STUB_LIB_OBJS += stubs/pager.o
+STUB_LIB_OBJS += stubs/misc.o
 
 BUILTIN_OBJS += builtin/add.o
 BUILTIN_OBJS += builtin/am.o
@@ -1335,7 +1344,7 @@ THIRD_PARTY_SOURCES += sha1collisiondetection/%
 THIRD_PARTY_SOURCES += sha1dc/%
 
 # xdiff and reftable libs may in turn depend on what is in libgit.a
-GITLIBS = common-main.o $(LIB_FILE) $(XDIFF_LIB) $(REFTABLE_LIB) $(LIB_FILE)
+GITLIBS = common-main.o $(STD_LIB_FILE) $(LIB_FILE) $(XDIFF_LIB) $(REFTABLE_LIB) $(LIB_FILE)
 EXTLIBS =
 
 GIT_USER_AGENT = git/$(GIT_VERSION)
@@ -2675,6 +2684,8 @@ OBJECTS += $(TEST_OBJS)
 OBJECTS += $(XDIFF_OBJS)
 OBJECTS += $(FUZZ_OBJS)
 OBJECTS += $(REFTABLE_OBJS) $(REFTABLE_TEST_OBJS)
+OBJECTS += $(STD_LIB_OBJS)
+OBJECTS += $(STUB_LIB_OBJS)
 
 ifndef NO_CURL
 	OBJECTS += http.o http-walker.o remote-curl.o
@@ -3668,7 +3679,7 @@ clean: profile-clean coverage-clean cocciclean
 	$(RM) git.res
 	$(RM) $(OBJECTS)
 	$(RM) headless-git.o
-	$(RM) $(LIB_FILE) $(XDIFF_LIB) $(REFTABLE_LIB) $(REFTABLE_TEST_LIB)
+	$(RM) $(LIB_FILE) $(XDIFF_LIB) $(REFTABLE_LIB) $(REFTABLE_TEST_LIB) $(STD_LIB_FILE) $(STUB_LIB_FILE)
 	$(RM) $(ALL_PROGRAMS) $(SCRIPT_LIB) $(BUILT_INS) $(OTHER_PROGRAMS)
 	$(RM) $(TEST_PROGRAMS)
 	$(RM) $(FUZZ_PROGRAMS)
@@ -3849,3 +3860,18 @@ $(FUZZ_PROGRAMS): all
 		$(XDIFF_OBJS) $(EXTLIBS) git.o $@.o $(LIB_FUZZING_ENGINE) -o $@
 
 fuzz-all: $(FUZZ_PROGRAMS)
+
+### Libified Git rules
+
+# git-std-lib.a
+# Programs other than git should compile this with
+#     make NO_GETTEXT=YesPlease git-std-lib.a
+# and link against git-stub-lib.a (if the default no-op functionality is fine)
+# or a custom .a file with the same interface as git-stub-lib.a (if custom
+# functionality is needed) as well.
+$(STD_LIB_FILE): $(STD_LIB_OBJS) $(COMPAT_OBJS)
+	$(QUIET_AR)$(RM) $@ && $(AR) $(ARFLAGS) $@ $^
+
+# git-stub-lib.a
+$(STUB_LIB_FILE): $(STUB_LIB_OBJS)
+	$(QUIET_AR)$(RM) $@ && $(AR) $(ARFLAGS) $@ $^

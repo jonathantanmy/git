@@ -865,6 +865,9 @@ TEST_BUILTINS_OBJS += test-xml-encode.o
 # them in TEST_BUILTINS_OBJS above.
 TEST_PROGRAMS_NEED_X += test-fake-ssh
 TEST_PROGRAMS_NEED_X += test-tool
+ifndef NO_POSIX_GOODIES
+	TEST_PROGRAMS_NEED_X += test-stdlib
+endif
 
 TEST_PROGRAMS = $(patsubst %,t/helper/%$X,$(TEST_PROGRAMS_NEED_X))
 
@@ -1147,7 +1150,6 @@ LIB_OBJS += statinfo.o
 LIB_OBJS += streaming.o
 LIB_OBJS += string-list.o
 LIB_OBJS += strmap.o
-LIB_OBJS += strvec.o
 LIB_OBJS += sub-process.o
 LIB_OBJS += submodule-config.o
 LIB_OBJS += submodule.o
@@ -1198,6 +1200,7 @@ STD_LIB_OBJS += date.o
 STD_LIB_OBJS += hex-ll.o
 STD_LIB_OBJS += parse.o
 STD_LIB_OBJS += strbuf.o
+STD_LIB_OBJS += strvec.o
 STD_LIB_OBJS += usage.o
 STD_LIB_OBJS += utf8.o
 STD_LIB_OBJS += wrapper.o
@@ -3188,6 +3191,10 @@ endif
 
 test_bindir_programs := $(patsubst %,bin-wrappers/%,$(BINDIR_PROGRAMS_NEED_X) $(BINDIR_PROGRAMS_NO_X) $(TEST_PROGRAMS_NEED_X))
 
+t/helper/test-stdlib$X: t/helper/test-stdlib.o GIT-LDFLAGS $(STD_LIB_FILE) $(STUB_LIB_FILE) $(GITLIBS)
+	$(QUIET_LINK)$(CC) $(ALL_CFLAGS) -o $@ $(ALL_LDFLAGS) \
+		$< $(STD_LIB_FILE) $(STUB_LIB_FILE) $(EXTLIBS)
+
 all:: $(TEST_PROGRAMS) $(test_bindir_programs)
 
 bin-wrappers/%: wrap-for-bin.sh
@@ -3617,7 +3624,7 @@ ifneq ($(INCLUDE_DLLS_IN_ARTIFACTS),)
 OTHER_PROGRAMS += $(shell echo *.dll t/helper/*.dll)
 endif
 
-artifacts-tar:: $(ALL_COMMANDS_TO_INSTALL) $(SCRIPT_LIB) $(OTHER_PROGRAMS) \
+artifacts-tar:: $(info npg=$(NO_POSIX_GOODIES) cc=$(COMPAT_CFLAGS) tp=$(TEST_PROGRAMS))$(ALL_COMMANDS_TO_INSTALL) $(SCRIPT_LIB) $(OTHER_PROGRAMS) \
 		GIT-BUILD-OPTIONS $(TEST_PROGRAMS) $(test_bindir_programs) \
 		$(MOFILES)
 	$(QUIET_SUBDIR0)templates $(QUIET_SUBDIR1) \

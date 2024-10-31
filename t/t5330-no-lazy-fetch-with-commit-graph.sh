@@ -39,7 +39,7 @@ test_expect_success 'fetch any commit from promisor with the usage of the commit
 	test_commit -C with-commit any-commit &&
 	anycommit=$(git -C with-commit rev-parse HEAD) &&
 	GIT_TRACE="$(pwd)/trace.txt" \
-		git -C with-commit-graph fetch origin $anycommit 2>err &&
+		test_must_fail git -C with-commit-graph fetch origin $anycommit 2>err &&
 	! grep "fatal: promisor-remote: unable to fork off fetch subprocess" err &&
 	grep "git fetch origin" trace.txt >actual &&
 	test_line_count = 1 actual
